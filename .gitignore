@@ -53,3 +53,6 @@ config.json
 # Temporary files
 *.tmp
 *.bak
+# PyInstaller build directories
+build/
+dist/
