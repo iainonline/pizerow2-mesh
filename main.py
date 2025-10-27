@@ -55,7 +55,16 @@ def load_config() -> Dict[str, Any]:
         "message_frequency": 60,
         "private_messages": True,
         "to_node_id": 2658499212,  # Decimal node ID for yang
-        "custom_message": "[{timestamp}] Battery: {battery}%"
+        "custom_message": "[{timestamp}] Battery: {battery}%",
+        "telemetry_mode": False,  # Enable comprehensive device telemetry
+        "message_templates": {
+            "basic": "[{timestamp}] Battery: {battery}%",
+            "detailed": "[{timestamp}] 🔋{battery}% ⚡{voltage}V �{channel_util}%",
+            "radio": "[{timestamp}] 🔋{battery}% 📻{channel_util}% 📶{rssi}dBm",
+            "full": "[{timestamp}] 🔋{battery}% ⚡{voltage}V 📻{channel_util}% ⏱️{uptime}"
+        },
+        "auto_start": True,
+        "auto_start_delay": 30
     }
     
     if os.path.exists(config_file):
@@ -313,11 +322,12 @@ def configure_message():
         print("  2️⃣  Set target node name")
         print("  3️⃣  Configure node ID")
         print("  4️⃣  Toggle privacy mode")
-        print("  5️⃣  Back to main menu")
+        print("  5️⃣  Message templates & telemetry")
+        print("  6️⃣  Back to main menu")
         
         print("\n" + "=" * 50)
         
-        choice = input("\n➤ Select option (1-5): ").strip()
+        choice = input("\n➤ Select option (1-6): ").strip()
         
         if choice == '1':
             configure_frequency(config)
@@ -328,9 +338,11 @@ def configure_message():
         elif choice == '4':
             toggle_privacy_mode(config)
         elif choice == '5':
+            configure_telemetry_options(config)
+        elif choice == '6':
             break
         else:
-            print("\n❌ Invalid choice. Please enter 1-5.")
+            print("\n❌ Invalid choice. Please enter 1-6.")
             input("\n⏸️  Press Enter to continue...")
 
 def configure_frequency(config):
@@ -441,6 +453,124 @@ def toggle_privacy_mode(config):
         print("📢 Messages will be visible to all nodes in the mesh")
     
     input("\n⏸️  Press Enter to continue...")
+
+def configure_telemetry_options(config):
+    """Configure message templates and telemetry options"""
+    print("\n📊 TELEMETRY & MESSAGE TEMPLATES")
+    print("─" * 40)
+    
+    # Ensure template structure exists
+    if 'message_templates' not in config:
+        config['message_templates'] = {
+            "basic": "[{timestamp}] Battery: {battery}%",
+            "detailed": "[{timestamp}] 🔋{battery}% ⚡{voltage}V �{channel_util}%",
+            "radio": "[{timestamp}] 🔋{battery}% 📻{channel_util}% 📶{rssi}dBm",
+            "full": "[{timestamp}] 🔋{battery}% ⚡{voltage}V 📻{channel_util}% ⏱️{uptime}"
+        }
+    
+    current_mode = "Enhanced" if config.get('telemetry_mode', False) else "Basic"
+    print(f"Current mode: {current_mode}")
+    print(f"Active template: {config.get('custom_message', 'Default')}")
+    
+    print("\n🎯 TEMPLATE OPTIONS:")
+    print("─" * 25)
+    templates = config['message_templates']
+    for i, (name, template) in enumerate(templates.items(), 1):
+        print(f"  {i}️⃣  {name.title()}: {template}")
+    
+    print("\n⚙️  ADVANCED OPTIONS:")
+    print("─" * 25)
+    print(f"  5️⃣  Toggle telemetry mode (current: {current_mode})")
+    print("  6️⃣  Custom template editor")
+    print("  7️⃣  Preview message with current data")
+    print("  8️⃣  Back to configuration menu")
+    
+    choice = input("\n➤ Select option (1-8): ").strip()
+    
+    if choice in ['1', '2', '3', '4']:
+        template_names = list(templates.keys())
+        selected_name = template_names[int(choice) - 1]
+        selected_template = templates[selected_name]
+        
+        config['custom_message'] = selected_template
+        config['telemetry_mode'] = (selected_name in ['detailed', 'radio', 'full'])
+        save_config(config)
+        
+        print(f"\n✅ Template set to '{selected_name.title()}'")
+        print(f"Telemetry mode: {'Enabled' if config['telemetry_mode'] else 'Disabled'}")
+        
+    elif choice == '5':
+        config['telemetry_mode'] = not config.get('telemetry_mode', False)
+        save_config(config)
+        new_mode = "Enhanced" if config['telemetry_mode'] else "Basic"
+        print(f"\n✅ Telemetry mode: {new_mode}")
+        
+    elif choice == '6':
+        print("\n📝 CUSTOM TEMPLATE EDITOR")
+        print("─" * 30)
+        print("Available variables:")
+        print("  {timestamp} - Message time")
+        print("  {battery} - Battery percentage")
+        print("  {voltage} - Device voltage")
+        # Environmental sensors not connected
+        print("  {channel_util} - Channel utilization")
+        print("  {rssi} - Signal strength")
+        print("  {uptime} - Device uptime")
+        
+        current = config.get('custom_message', '')
+        print(f"\nCurrent: {current}")
+        
+        new_template = input("\nEnter new template (or press Enter to cancel): ").strip()
+        if new_template:
+            config['custom_message'] = new_template
+            config['telemetry_mode'] = True  # Enable telemetry for custom templates
+            save_config(config)
+            print("\n✅ Custom template saved!")
+            
+    elif choice == '7':
+        preview_message_with_data(config)
+        
+    input("\n⏸️  Press Enter to continue...")
+
+def preview_message_with_data(config):
+    """Preview what a message would look like with current data"""
+    print("\n🔎 MESSAGE PREVIEW")
+    print("─" * 20)
+    
+    try:
+        # Create sample data
+        from datetime import datetime
+        sample_data = {
+            'timestamp': datetime.now().strftime("%H:%M:%S"),
+            'battery': 87.3,
+            'voltage': 4.15,
+            'channel_util': 12.5,
+            'rssi': -42,
+            'uptime': '2.3h'
+        }
+        
+        template = config.get('custom_message', '[{timestamp}] Battery: {battery}%')
+        
+        try:
+            preview = template.format(**sample_data)
+            print(f"Template: {template}")
+            print(f"Preview:  {preview}")
+            
+            print(f"\n📊 Data includes:")
+            if config.get('telemetry_mode', False):
+                print("  ✅ Enhanced telemetry (voltage, signals, uptime)")
+                print("  ✅ Environmental sensors (temp/humidity)")
+                print("  ✅ Radio metrics (channel utilization, RSSI)")
+            else:
+                print("  • Basic battery and timestamp only")
+                print("  ℹ️ Enable telemetry mode for more data")
+                
+        except KeyError as e:
+            print(f"⚠️  Template error: Variable {e} not available")
+            print("Available variables listed in custom template editor")
+            
+    except Exception as e:
+        print(f"❌ Preview error: {e}")
 
 def old_configure_message():
     """Legacy configure message function - keeping for reference"""
@@ -600,22 +730,40 @@ def start_messaging():
                         battery_level = comm.get_battery_level()
                         battery = battery_level if battery_level else 0
                         
+                        # Get enhanced telemetry data if enabled
+                        telemetry_mode = config.get('telemetry_mode', False)
+                        message_data = {'timestamp': timestamp, 'battery': battery}
+                        
+                        if telemetry_mode:
+                            # Get comprehensive device telemetry
+                            device_telemetry = comm.get_device_telemetry()
+                            
+                            # Add all available data to template variables
+                            message_data.update({
+                                'voltage': device_telemetry.get('voltage', 0.0) or 0.0,
+                                'channel_util': device_telemetry.get('channel_utilization', 0.0) or 0.0,
+                                'rssi': device_telemetry.get('rssi', 0) or 0,
+                                'uptime': f"{(device_telemetry.get('uptime_seconds', 0) or 0) / 3600:.1f}h"
+                            })
+                        
                         # Use custom message template with error handling
                         custom_template = config.get('custom_message', "[{timestamp}] Battery: {battery}%")
                         try:
-                            message = custom_template.format(
-                                timestamp=timestamp,
-                                battery=battery,
-                                to_node=config['to_node']
-                            )
+                            message = custom_template.format(**message_data)
                         except (KeyError, ValueError) as e:
                             # Fallback to default message if template is invalid
                             logger.warning(f"Invalid message template: {e}. Using default.")
                             message = f"[{timestamp}] Battery: {battery}%"
                         
                         private_mode = config.get('private_messages', True)
-                        # Send simple message since sensor data is already included in the template
-                        success = comm.send_message(message, include_battery=False, include_sensors=False, private=private_mode)
+                        # Send message with telemetry if enabled
+                        success = comm.send_message(
+                            message, 
+                            include_battery=False, 
+                            include_sensors=False, 
+                            include_telemetry=telemetry_mode,
+                            private=private_mode
+                        )
                         
                         # Enhanced logging with timestamp and status
                         log_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -964,6 +1112,29 @@ def main():
     print(f"Detailed logs: {log_file}")
     
     try:
+        config = load_config()
+        
+        # Auto-start functionality
+        if config.get('auto_start', True) and config.get('serial_port'):
+            auto_delay = config.get('auto_start_delay', 30)
+            print(f"\n🚀 AUTO-START ENABLED")
+            print(f"Will automatically start messaging in {auto_delay} seconds...")
+            print("Press Ctrl+C to access menu instead")
+            
+            try:
+                # Simple countdown with interrupt
+                for remaining in range(auto_delay, 0, -1):
+                    print(f"\r🕒 Starting in {remaining:2d} seconds... (Ctrl+C to cancel)", end='', flush=True)
+                    time.sleep(1)
+                
+                print("\n\n🚀 Auto-starting messaging service...")
+                start_messaging()
+                return
+                
+            except KeyboardInterrupt:
+                print("\n\n🛡️  Auto-start cancelled. Showing menu...")
+        
+        # Regular menu loop
         while True:
             config = load_config()
             display_main_menu(config)

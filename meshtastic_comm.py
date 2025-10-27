@@ -8,13 +8,7 @@ import meshtastic.serial_interface
 import serial.tools.list_ports
 from pubsub import pub
 
-# DHT22 sensor support
-try:
-    import board
-    import adafruit_dht
-    DHT22_AVAILABLE = True
-except ImportError:
-    DHT22_AVAILABLE = False
+# Sensor support removed - no external sensors connected
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +287,135 @@ class MeshtasticComm:
             logger.error(f"Error getting battery level: {e}")
             return self.last_battery_level
     
-    def send_message(self, message: str, include_battery: bool = True, include_sensors: bool = True, private: bool = True) -> bool:
+    def get_device_telemetry(self) -> Dict[str, Any]:
+        """
+        Get comprehensive device telemetry data from Heltec V3
+        
+        Returns:
+            Dict containing various telemetry metrics
+        """
+        telemetry = {
+            'battery_level': None,
+            'voltage': None,
+            'channel_utilization': None,
+            'air_util_tx': None,
+            'uptime_seconds': None,
+            'memory_free': None,
+            'signal_strength': None,
+            'snr': None,
+            'rssi': None,
+            'hw_model': None,
+            'firmware_version': None,
+            'region': None,
+            'modem_preset': None
+        }
+        
+        try:
+            if not self.is_connected():
+                return telemetry
+            
+            # Get device metrics from the local node
+            if hasattr(self.interface, 'nodes') and self.interface.nodes:
+                my_node_num = getattr(self.interface.myInfo, 'my_node_num', None)
+                if my_node_num and my_node_num in self.interface.nodesByNum:
+                    node = self.interface.nodesByNum[my_node_num]
+                    
+                    # Device metrics (battery, voltage, etc.)
+                    if 'deviceMetrics' in node:
+                        metrics = node['deviceMetrics']
+                        telemetry['battery_level'] = metrics.get('batteryLevel')
+                        telemetry['voltage'] = metrics.get('voltage')
+                        telemetry['channel_utilization'] = metrics.get('channelUtilization')
+                        telemetry['air_util_tx'] = metrics.get('airUtilTx')
+                        telemetry['uptime_seconds'] = metrics.get('uptimeSeconds')
+                    
+                    # User info (hardware model, etc.)
+                    if 'user' in node:
+                        user_info = node['user']
+                        telemetry['hw_model'] = user_info.get('hwModel', 'Unknown')
+                        
+                    # Position info might include signal data
+                    if 'position' in node:
+                        pos_info = node['position']
+                        telemetry['signal_strength'] = pos_info.get('rxSnr')
+                        telemetry['rssi'] = pos_info.get('rxRssi')
+            
+            # Get radio configuration
+            if hasattr(self.interface, 'radioConfig'):
+                radio_config = self.interface.radioConfig
+                if hasattr(radio_config, 'preferences'):
+                    prefs = radio_config.preferences
+                    telemetry['region'] = getattr(prefs, 'region', 'Unknown')
+                    telemetry['modem_preset'] = getattr(prefs, 'modemPreset', 'Unknown')
+                    
+            # Get firmware version from interface info
+            if hasattr(self.interface, 'myInfo'):
+                my_info = self.interface.myInfo
+                if hasattr(my_info, 'firmware_version'):
+                    telemetry['firmware_version'] = my_info.firmware_version
+                    
+        except Exception as e:
+            logger.error(f"Error getting device telemetry: {e}")
+            
+        return telemetry
+    
+    def get_interesting_data(self) -> str:
+        """
+        Generate an interesting data string with various Heltec V3 metrics
+        
+        Returns:
+            Formatted string with interesting device data
+        """
+        try:
+            telemetry = self.get_device_telemetry()
+            dht_data = self.read_dht22_sensor()
+            
+            data_parts = []
+            
+            # Battery and power
+            if telemetry['battery_level'] is not None:
+                data_parts.append(f"🔋{telemetry['battery_level']:.1f}%")
+            if telemetry['voltage'] is not None:
+                data_parts.append(f"⚡{telemetry['voltage']:.2f}V")
+                
+            # Environmental sensors not connected - skipping
+                
+            # Radio metrics
+            if telemetry['channel_utilization'] is not None:
+                data_parts.append(f"📻{telemetry['channel_utilization']:.1f}%")
+            if telemetry['air_util_tx'] is not None:
+                data_parts.append(f"📡{telemetry['air_util_tx']:.1f}%")
+                
+            # Signal strength
+            if telemetry['rssi'] is not None:
+                data_parts.append(f"📶{telemetry['rssi']}dBm")
+            if telemetry['snr'] is not None:
+                data_parts.append(f"🎯{telemetry['snr']:.1f}dB")
+                
+            # Uptime (converted to human readable)
+            if telemetry['uptime_seconds'] is not None:
+                uptime_hours = telemetry['uptime_seconds'] / 3600
+                if uptime_hours < 24:
+                    data_parts.append(f"⏱️{uptime_hours:.1f}h")
+                else:
+                    uptime_days = uptime_hours / 24
+                    data_parts.append(f"⏱️{uptime_days:.1f}d")
+                    
+            # Hardware info (occasionally)
+            import random
+            if random.randint(1, 10) == 1:  # 10% chance to include hardware info
+                if telemetry['hw_model']:
+                    data_parts.append(f"💻{telemetry['hw_model']}")
+                if telemetry['region']:
+                    data_parts.append(f"🌍{telemetry['region']}")
+                    
+            return " | " + " ".join(data_parts) if data_parts else ""
+            
+        except Exception as e:
+            logger.error(f"Error generating interesting data: {e}")
+            return ""
+    
+    def send_message(self, message: str, include_battery: bool = True, include_sensors: bool = True, private: bool = True, include_telemetry: bool = False) -> bool:
         """
         Send a message via the Meshtastic device
         
@@ -302,6 +424,7 @@ class MeshtasticComm:
             include_battery: Whether to include battery level in message
             include_sensors: Whether to include DHT22 sensor data in message
             private: If True, send as private message to to_node; if False, broadcast publicly
+            include_telemetry: Whether to include comprehensive device telemetry
             
         Returns:
             bool: True if message sent successfully, False otherwise
@@ -332,22 +455,25 @@ class MeshtasticComm:
                 full_message = f"[{self.from_node}→{self.to_node}] {message}"
             
             # Add sensor data to message
-            sensor_data = []
-            if include_battery:
-                battery_level = self.get_battery_level()
-                if battery_level is not None:
-                    sensor_data.append(f"Battery: {battery_level:.1f}%")
-                    
-            if include_sensors:
-                dht_data = self.read_dht22_sensor()
-                if dht_data['temperature'] is not None and dht_data['humidity'] is not None:
-                    sensor_data.append(f"Temp: {dht_data['temperature']}°C")
-                    sensor_data.append(f"Humidity: {dht_data['humidity']}%")
-                elif DHT22_AVAILABLE:
-                    sensor_data.append("Sensors: Error reading DHT22")
-                    
-            if sensor_data:
-                full_message += f" | {' | '.join(sensor_data)}"
+            if include_telemetry:
+                # Use comprehensive telemetry data
+                interesting_data = self.get_interesting_data()
+                if interesting_data:
+                    full_message += interesting_data
+            else:
+                # Use basic sensor data (backwards compatibility)
+                sensor_data = []
+                if include_battery:
+                    battery_level = self.get_battery_level()
+                    if battery_level is not None:
+                        sensor_data.append(f"Battery: {battery_level:.1f}%")
+                        
+                if include_sensors:
+                    # No external sensors connected
+                    pass
+                        
+                if sensor_data:
+                    full_message += f" | {' | '.join(sensor_data)}"
             
             # Send the message
             if private and self.to_node:
@@ -464,74 +590,14 @@ class MeshtasticComm:
     
     def read_dht22_sensor(self, pin: int = 4) -> Dict[str, Optional[float]]:
         """
-        Read temperature and humidity from DHT22 sensor
+        DHT22 sensor not connected - returns zero values
         
-        Args:
-            pin: GPIO pin number where DHT22 data pin is connected (default: 4)
-            
         Returns:
-            Dictionary with 'temperature' and 'humidity' keys, None values if reading fails
+            Dictionary with 'temperature' and 'humidity' keys set to 0.0
         """
-        result = {'temperature': None, 'humidity': None}
-        
-        if not DHT22_AVAILABLE:
-            logger.debug("DHT22 library not available - returning zero values")
-            result['temperature'] = 0.0
-            result['humidity'] = 0.0
-            logger.debug(f"DHT22 not available: {result['temperature']}°F, {result['humidity']}%")
-            return result
-            
-        try:
-            # Create DHT22 sensor object using CircuitPython library
-            # Convert pin number to board pin (GPIO4 = board.D4)
-            if pin == 4:
-                dht_pin = board.D4
-            elif pin == 18:
-                dht_pin = board.D18
-            else:
-                # Default to D4 if pin not recognized
-                dht_pin = board.D4
-                logger.warning(f"Pin {pin} not recognized, using GPIO 4 (D4)")
-                
-            dht = adafruit_dht.DHT22(dht_pin)
-            
-            # Read from DHT22 sensor with retry logic
-            for attempt in range(3):
-                try:
-                    temperature = dht.temperature
-                    humidity = dht.humidity
-                    
-                    if temperature is not None and humidity is not None:
-                        # Convert Celsius to Fahrenheit
-                        temp_f = (temperature * 9/5) + 32
-                        result['temperature'] = round(temp_f, 1)
-                        result['humidity'] = round(humidity, 1)
-                        logger.debug(f"DHT22 reading successful: {temp_f:.1f}°F, {humidity:.1f}%")
-                        break
-                except RuntimeError as e:
-                    # DHT22 can be finicky, retry on runtime errors
-                    if attempt < 2:
-                        time.sleep(0.5)
-                        continue
-                    else:
-                        logger.warning(f"DHT22 sensor reading failed after retries: {e}")
-                        
-            # Clean up the sensor object
-            dht.exit()
-            
-            # If sensor reading failed (no physical sensor), return zero values
-            if result['temperature'] is None or result['humidity'] is None:
-                result['temperature'] = 0.0
-                result['humidity'] = 0.0
-                logger.debug(f"DHT22 sensor not connected - using zero values: {result['temperature']}°F, {result['humidity']}%")
-                
-        except Exception as e:
-            logger.error(f"Error reading DHT22 sensor: {e}")
-            # Return zero values when there's an error
-            result['temperature'] = 0.0
-            result['humidity'] = 0.0
-            logger.debug(f"DHT22 sensor error - using zero values: {result['temperature']}°F, {result['humidity']}%")
-            
+        # No DHT22 sensor connected, return zero values
+        result = {'temperature': 0.0, 'humidity': 0.0}
+        logger.debug("No DHT22 sensor connected - returning zero values")
         return result
     
     def start_messaging(self):
