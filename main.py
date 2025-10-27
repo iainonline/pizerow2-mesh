@@ -55,13 +55,13 @@ def load_config() -> Dict[str, Any]:
         "message_frequency": 60,
         "private_messages": True,
         "to_node_id": 2658499212,  # Decimal node ID for yang
-        "custom_message": "[{timestamp}] Battery: {battery} Uptime: {uptime}",
+        "custom_message": "[{timestamp}] Battery: {battery}% Uptime: {uptime}",
         "telemetry_mode": False,  # Enable comprehensive device telemetry
         "message_templates": {
-            "basic": "[{timestamp}] Battery: {battery}",
-            "detailed": "[{timestamp}] Battery: {battery} Voltage: {voltage} Channel: {channel_util}",
-            "radio": "[{timestamp}] Battery: {battery} Channel: {channel_util} RSSI: {rssi}",
-            "full": "[{timestamp}] Battery: {battery} Voltage: {voltage} Channel: {channel_util} Uptime: {uptime}"
+            "basic": "[{timestamp}] Battery: {battery}%",
+            "detailed": "[{timestamp}] Battery: {battery}% Voltage: {voltage} Channel: {channel_util}",
+            "radio": "[{timestamp}] Battery: {battery}% Channel: {channel_util} RSSI: {rssi}",
+            "full": "[{timestamp}] Battery: {battery}% Voltage: {voltage} Channel: {channel_util} Uptime: {uptime}"
         },
         "auto_start": True,
         "auto_start_delay": 10
@@ -302,7 +302,7 @@ def configure_message():
         
         # Add default custom message if not present
         if 'custom_message' not in config:
-            config['custom_message'] = "[{timestamp}] Battery: {battery}"
+            config['custom_message'] = "[{timestamp}] Battery: {battery}%"
         
         print("\n" + "=" * 50)
         print("         MESSAGE CONFIGURATION")
@@ -542,7 +542,7 @@ def preview_message_with_data(config):
             'uptime': '2.3h'
         }
         
-        template = config.get('custom_message', '[{timestamp}] Battery: {battery}')
+        template = config.get('custom_message', '[{timestamp}] Battery: {battery}%')
         
         try:
             preview = template.format(**sample_data)
@@ -744,7 +744,7 @@ def start_messaging():
                             })
                         
                         # Use custom message template with error handling
-                        custom_template = config.get('custom_message', "[{timestamp}] Battery: {battery}")
+                        custom_template = config.get('custom_message', "[{timestamp}] Battery: {battery}%")
                         try:
                             message = custom_template.format(**message_data)
                         except (KeyError, ValueError) as e:
