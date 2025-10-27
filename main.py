@@ -724,24 +724,22 @@ def start_messaging():
                         
                         # Get enhanced telemetry data if enabled
                         telemetry_mode = config.get('telemetry_mode', False)
-                        message_data = {'timestamp': timestamp, 'battery': battery}
                         
-                        if telemetry_mode:
-                            # Get comprehensive device telemetry
-                            device_telemetry = comm.get_device_telemetry()
-                            
-                            # Add only uptime data for simple messaging
-                            uptime_seconds = device_telemetry.get('uptime_seconds', 0) or 0
-                            if uptime_seconds < 3600:
-                                uptime_str = f"{uptime_seconds / 60:.0f}m"
-                            elif uptime_seconds < 86400:
-                                uptime_str = f"{uptime_seconds / 3600:.1f}h"
-                            else:
-                                uptime_str = f"{uptime_seconds / 86400:.1f}d"
-                            
-                            message_data.update({
-                                'uptime': uptime_str
-                            })
+                        # Always get uptime data for basic messaging
+                        device_telemetry = comm.get_device_telemetry()
+                        uptime_seconds = device_telemetry.get('uptime_seconds', 0) or 0
+                        if uptime_seconds < 3600:
+                            uptime_str = f"{uptime_seconds / 60:.0f}m"
+                        elif uptime_seconds < 86400:
+                            uptime_str = f"{uptime_seconds / 3600:.1f}h"
+                        else:
+                            uptime_str = f"{uptime_seconds / 86400:.1f}d"
+                        
+                        message_data = {
+                            'timestamp': timestamp, 
+                            'battery': battery,
+                            'uptime': uptime_str
+                        }
                         
                         # Use custom message template with error handling
                         custom_template = config.get('custom_message', "[{timestamp}] Battery: {battery}%")
