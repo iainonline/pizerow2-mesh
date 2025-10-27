@@ -55,16 +55,16 @@ def load_config() -> Dict[str, Any]:
         "message_frequency": 60,
         "private_messages": True,
         "to_node_id": 2658499212,  # Decimal node ID for yang
-        "custom_message": "[{timestamp}] Battery: {battery}%",
+        "custom_message": "[{timestamp}] Battery: {battery}% | Uptime: {uptime}",
         "telemetry_mode": False,  # Enable comprehensive device telemetry
         "message_templates": {
             "basic": "[{timestamp}] Battery: {battery}%",
-            "detailed": "[{timestamp}] 🔋{battery}% ⚡{voltage}V �{channel_util}%",
-            "radio": "[{timestamp}] 🔋{battery}% 📻{channel_util}% 📶{rssi}dBm",
-            "full": "[{timestamp}] 🔋{battery}% ⚡{voltage}V 📻{channel_util}% ⏱️{uptime}"
+            "detailed": "[{timestamp}] Battery: {battery}% Voltage: {voltage}V | Channel: {channel_util}%",
+            "radio": "[{timestamp}] Battery: {battery}% Channel: {channel_util}% RSSI: {rssi}dBm",
+            "full": "[{timestamp}] Battery: {battery}% Voltage: {voltage}V Channel: {channel_util}% Uptime: {uptime}"
         },
         "auto_start": True,
-        "auto_start_delay": 30
+        "auto_start_delay": 10
     }
     
     if os.path.exists(config_file):
@@ -100,42 +100,42 @@ def display_main_menu(config):
     print("=" * 60)
     
     # Status section
-    print("\n📊 CURRENT STATUS:")
-    print("─" * 30)
+    print("\nTelemetry: CURRENT STATUS:")
+    print("-" * 30)
     
     # Device info
     device_info = get_device_display_info(config)
     if device_info:
-        print(f"📡 Device: {device_info[:50]}..." if len(device_info) > 50 else f"📡 Device: {device_info}")
-        print(f"🎯 Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
-        print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
-        print(f"🔐 Mode: {'Private' if config.get('private_messages', True) else 'Broadcast'}")
+        print(f"Device: Device: {device_info[:50]}..." if len(device_info) > 50 else f"Device: Device: {device_info}")
+        print(f"Target: Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
+        print(f"Uptime:  Frequency: Every {config['message_frequency']} seconds")
+        print(f"Mode: Mode: {'Private' if config.get('private_messages', True) else 'Broadcast'}")
     else:
-        print("❌ No device configured - Setup required")
+        print("Error: No device configured - Setup required")
     
-    print("\n🎮 QUICK ACTIONS:")
-    print("─" * 30)
+    print("\nActions: QUICK ACTIONS:")
+    print("-" * 30)
     if device_info:
-        print("  🚀 [S] Start Messaging (Quick Start)")
-        print("  🔧 [C] Configure Settings")
-    print("  📱 [D] Device Setup")
-    print("  🧪 [T] Test Connection")
+        print("  Start [S] Start Messaging (Quick Start)")
+        print("  Config [C] Configure Settings")
+    print("  Setup [D] Device Setup")
+    print("  Test [T] Test Connection")
     
-    print("\n⚙️  MAIN MENU:")
-    print("─" * 30)
-    print("  1️⃣  Device Management")
-    print("  2️⃣  Connection Test")
-    print("  3️⃣  Message Configuration")
-    print("  4️⃣  Run Program (with message log)")
-    print("  5️⃣  Diagnostics & Logs")
-    print("  6️⃣  Exit Application")
+    print("\nConfig:  MAIN MENU:")
+    print("-" * 30)
+    print("  1.  Device Management")
+    print("  2.  Connection Test")
+    print("  3.  Message Configuration")
+    print("  4.  Run Program (with message log)")
+    print("  5.  Diagnostics & Logs")
+    print("  6.  Exit Application")
     print("\n" + "=" * 60)
     
     # Show helpful hints
     if device_info:
-        print("💡 Tip: Press 'S' for quick start or choose a number (1-6)")
+        print("Tip: Tip: Press 'S' for quick start or choose a number (1-6)")
     else:
-        print("💡 Tip: Start with option 1 to configure your device")
+        print("Tip: Tip: Start with option 1 to configure your device")
     
 def pair_or_change_device():
     """Scan for and pair with a Meshtastic device"""
@@ -182,7 +182,7 @@ def pair_or_change_device():
                         if 'ble_address' in config:
                             config['ble_address'] = ""
                         save_config(config)
-                        print(f"\n✓ Device paired: {selected_device['name']}")
+                        print(f"\nSuccess Device paired: {selected_device['name']}")
                         print(f"Port: {selected_device['port']}")
                         logger.info(f"Device paired: {selected_device['name']} ({selected_device['port']})")
                     else:
@@ -202,14 +202,14 @@ def pair_or_change_device():
                 if 'ble_address' in config:
                     config['ble_address'] = ""
                 save_config(config)
-                print(f"\n✓ Device port set: {new_port}")
+                print(f"\nSuccess Device port set: {new_port}")
                 logger.info(f"Manual device port set: {new_port}")
             else:
                 print("Invalid serial port format. Should start with /dev/")
                 
     except Exception as e:
         error_msg = f"Error in device pairing: {str(e)}"
-        print(f"\n✗ {error_msg}")
+        print(f"\nError {error_msg}")
         logger.error(error_msg)
         
     input("\\nPress Enter to continue...")
@@ -250,7 +250,7 @@ def test_connection():
         serial_port = config.get('last_connected_device') or config.get('serial_port')
         
         if not serial_port:
-            print("\\n✗ No device paired. Please pair a device first.")
+            print("\\nError No device paired. Please pair a device first.")
             input("\\nPress Enter to continue...")
             return
             
@@ -269,18 +269,18 @@ def test_connection():
         try:
             success = comm.test_connection(serial_port)
         except KeyboardInterrupt:
-            print("\\n\\n⚠️ Connection test cancelled by user")
+            print("\\n\\nWarning: Connection test cancelled by user")
             print("The connection attempt was interrupted.")
             return
         
         if success:
             print("\n\u2713 Connection test PASSED!")
-            print("• USB/Serial connection established successfully")
-            print("• Device is reachable and responding")
-            print("• Ready for messaging operations")
+            print("- USB/Serial connection established successfully")
+            print("- Device is reachable and responding")
+            print("- Ready for messaging operations")
         else:
-            print("\n✗ Connection test FAILED!")
-            print("• Could not establish Bluetooth connection")
+            print("\nError Connection test FAILED!")
+            print("- Could not establish Bluetooth connection")
             print("\nTroubleshooting:")
             print("  - Ensure device is powered on and nearby")
             print("  - Check device is within Bluetooth range (<10m)")
@@ -290,7 +290,7 @@ def test_connection():
             
     except Exception as e:
         error_msg = f"Error testing connection: {str(e)}"
-        print(f"\n✗ {error_msg}")
+        print(f"\nError {error_msg}")
         logger.error(error_msg)
         
     input("\nPress Enter to continue...")
@@ -308,26 +308,26 @@ def configure_message():
         print("         MESSAGE CONFIGURATION")
         print("=" * 50)
         
-        print("\n📊 CURRENT SETTINGS:")
-        print("─" * 25)
-        print(f"🎯 Target Node: {config['to_node']}")
-        print(f"🆔 Node ID: {config.get('to_node_id', 'Auto-detect')}")
-        print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
-        print(f"🔐 Mode: {'🔒 Private' if config.get('private_messages', True) else '📢 Broadcast'}")
-        print(f"💬 Template: {config['custom_message']}")
+        print("\nCURRENT SETTINGS:")
+        print("-" * 25)
+        print(f"Target Node: {config['to_node']}")
+        print(f"Node ID: {config.get('to_node_id', 'Auto-detect')}")
+        print(f"Frequency: Every {config['message_frequency']} seconds")
+        print(f"Mode: {'Private' if config.get('private_messages', True) else 'Broadcast'}")
+        print(f"Template: {config['custom_message']}")
         
-        print("\n⚙️  CONFIGURATION OPTIONS:")
-        print("─" * 30)
-        print("  1️⃣  Change message frequency")
-        print("  2️⃣  Set target node name")
-        print("  3️⃣  Configure node ID")
-        print("  4️⃣  Toggle privacy mode")
-        print("  5️⃣  Message templates & telemetry")
-        print("  6️⃣  Back to main menu")
+        print("\nCONFIGURATION OPTIONS:")
+        print("-" * 30)
+        print("  1. Change message frequency")
+        print("  2. Set target node name")
+        print("  3. Configure node ID")
+        print("  4. Toggle privacy mode")
+        print("  5. Message templates & telemetry")
+        print("  6. Back to main menu")
         
         print("\n" + "=" * 50)
         
-        choice = input("\n➤ Select option (1-6): ").strip()
+        choice = input("\nSelect option (1-6): ").strip()
         
         if choice == '1':
             configure_frequency(config)
@@ -342,23 +342,23 @@ def configure_message():
         elif choice == '6':
             break
         else:
-            print("\n❌ Invalid choice. Please enter 1-6.")
-            input("\n⏸️  Press Enter to continue...")
+            print("\nError: Invalid choice. Please enter 1-6.")
+            input("\nPause:  Press Enter to continue...")
 
 def configure_frequency(config):
     """Configure message frequency with validation"""
-    print("\n⏱️  MESSAGE FREQUENCY SETUP")
-    print("─" * 30)
+    print("\nUptime:  MESSAGE FREQUENCY SETUP")
+    print("-" * 30)
     print(f"Current: Every {config['message_frequency']} seconds")
     print("\nRecommended settings:")
-    print("  • 30s - High frequency (testing)")
-    print("  • 60s - Normal (recommended)")
-    print("  • 300s - Low frequency (5 min)")
-    print("  • 900s - Very low (15 min)")
+    print("  - 30s - High frequency (testing)")
+    print("  - 60s - Normal (recommended)")
+    print("  - 300s - Low frequency (5 min)")
+    print("  - 900s - Very low (15 min)")
     
     while True:
         try:
-            new_freq = input("\n➤ Enter frequency in seconds (10-3600): ").strip()
+            new_freq = input("\n> Enter frequency in seconds (10-3600): ").strip()
             if not new_freq:
                 return
             
@@ -366,126 +366,126 @@ def configure_frequency(config):
             if 10 <= freq <= 3600:
                 config['message_frequency'] = freq
                 save_config(config)
-                print(f"\n✅ Frequency set to {freq} seconds")
+                print(f"\nSuccess: Frequency set to {freq} seconds")
                 
                 # Show practical info
                 if freq < 60:
-                    print("⚠️  High frequency - good for testing")
+                    print("Warning:  High frequency - good for testing")
                 elif freq <= 300:
-                    print("✅ Good balance of updates and battery life")
+                    print("Success: Good balance of updates and battery life")
                 else:
-                    print("🔋 Low frequency - maximizes battery life")
+                    print("Battery: Low frequency - maximizes battery life")
                 break
             else:
-                print("❌ Frequency must be between 10 and 3600 seconds")
+                print("Error: Frequency must be between 10 and 3600 seconds")
         except ValueError:
-            print("❌ Please enter a valid number")
+            print("Error: Please enter a valid number")
     
-    input("\n⏸️  Press Enter to continue...")
+    input("\nPause:  Press Enter to continue...")
 
 def configure_target_node(config):
     """Configure target node name"""
-    print("\n🎯 TARGET NODE SETUP")
-    print("─" * 25)
+    print("\nTarget: TARGET NODE SETUP")
+    print("-" * 25)
     print(f"Current target: {config['to_node']}")
     
-    new_target = input("\n➤ Enter target node name: ").strip()
+    new_target = input("\n> Enter target node name: ").strip()
     if new_target:
         config['to_node'] = new_target
         save_config(config)
-        print(f"\n✅ Target node set to '{new_target}'")
+        print(f"\nSuccess: Target node set to '{new_target}'")
     
-    input("\n⏸️  Press Enter to continue...")
+    input("\nPause:  Press Enter to continue...")
 
 def configure_node_id(config):
     """Configure target node ID with validation"""
-    print("\n🆔 NODE ID CONFIGURATION")
-    print("─" * 30)
+    print("\nID: NODE ID CONFIGURATION")
+    print("-" * 30)
     print(f"Current ID: {config.get('to_node_id', 'Auto-detect')}")
     print("\nNode ID helps ensure private messages reach the right device.")
-    print("\n💡 Examples:")
-    print("  • 2658499212 (decimal format)")
-    print("  • Leave blank for auto-detection")
+    print("\nTip: Examples:")
+    print("  - 2658499212 (decimal format)")
+    print("  - Leave blank for auto-detection")
     
-    node_id_input = input("\n➤ Enter node ID (or press Enter for auto): ").strip()
+    node_id_input = input("\n> Enter node ID (or press Enter for auto): ").strip()
     
     if node_id_input:
         try:
             node_id = int(node_id_input)
             config['to_node_id'] = node_id
             save_config(config)
-            print(f"\n✅ Node ID set to {node_id}")
+            print(f"\nSuccess: Node ID set to {node_id}")
         except ValueError:
-            print("\n❌ Invalid node ID. Please enter a decimal number.")
+            print("\nError: Invalid node ID. Please enter a decimal number.")
     else:
         if config.get('to_node_id'):
-            clear = input("\n❓ Clear existing node ID? (y/N): ").strip().lower()
+            clear = input("\nQuestion: Clear existing node ID? (y/N): ").strip().lower()
             if clear == 'y':
                 config['to_node_id'] = None
                 save_config(config)
-                print("\n✅ Node ID cleared - will use auto-detection")
+                print("\nSuccess: Node ID cleared - will use auto-detection")
     
-    input("\n⏸️  Press Enter to continue...")
+    input("\nPause:  Press Enter to continue...")
 
 def toggle_privacy_mode(config):
     """Toggle between private and broadcast messaging"""
     current_private = config.get('private_messages', True)
     
-    print("\n🔐 PRIVACY MODE SELECTION")
-    print("─" * 30)
-    print(f"Current mode: {'🔒 Private' if current_private else '📢 Broadcast'}")
+    print("\nMode: PRIVACY MODE SELECTION")
+    print("-" * 30)
+    print(f"Current mode: {'Private Private' if current_private else 'Broadcast Broadcast'}")
     
-    print("\n📋 Options:")
-    print("  1️⃣  🔒 Private messages (sent to specific node only)")
-    print("  2️⃣  📢 Broadcast messages (visible to all nodes)")
+    print("\nOptions: Options:")
+    print("  1.  Private Private messages (sent to specific node only)")
+    print("  2.  Broadcast Broadcast messages (visible to all nodes)")
     
-    choice = input("\n➤ Choose mode (1/2): ").strip()
+    choice = input("\n> Choose mode (1/2): ").strip()
     
     if choice == '1':
         config['private_messages'] = True
         save_config(config)
-        print("\n✅ Private messaging enabled")
-        print("🔒 Messages will be sent only to your target node")
+        print("\nSuccess: Private messaging enabled")
+        print("Private Messages will be sent only to your target node")
     elif choice == '2':
         config['private_messages'] = False
         save_config(config)
-        print("\n✅ Broadcast messaging enabled")
-        print("📢 Messages will be visible to all nodes in the mesh")
+        print("\nBroadcast messaging enabled")
+        print("Messages will be visible to all nodes in the mesh")
     
-    input("\n⏸️  Press Enter to continue...")
+    input("\nPause:  Press Enter to continue...")
 
 def configure_telemetry_options(config):
     """Configure message templates and telemetry options"""
-    print("\n📊 TELEMETRY & MESSAGE TEMPLATES")
-    print("─" * 40)
+    print("\nTELEMETRY & MESSAGE TEMPLATES")
+    print("-" * 40)
     
     # Ensure template structure exists
     if 'message_templates' not in config:
         config['message_templates'] = {
             "basic": "[{timestamp}] Battery: {battery}%",
-            "detailed": "[{timestamp}] 🔋{battery}% ⚡{voltage}V �{channel_util}%",
-            "radio": "[{timestamp}] 🔋{battery}% 📻{channel_util}% 📶{rssi}dBm",
-            "full": "[{timestamp}] 🔋{battery}% ⚡{voltage}V 📻{channel_util}% ⏱️{uptime}"
+            "detailed": "[{timestamp}] Battery: {battery}% Voltage: {voltage}V | Channel: {channel_util}%",
+            "radio": "[{timestamp}] Battery: {battery}% Channel: {channel_util}% RSSI: {rssi}dBm",
+            "full": "[{timestamp}] Battery: {battery}% Voltage: {voltage}V Channel: {channel_util}% Uptime: {uptime}"
         }
     
     current_mode = "Enhanced" if config.get('telemetry_mode', False) else "Basic"
     print(f"Current mode: {current_mode}")
     print(f"Active template: {config.get('custom_message', 'Default')}")
     
-    print("\n🎯 TEMPLATE OPTIONS:")
-    print("─" * 25)
+    print("\nTEMPLATE OPTIONS:")
+    print("-" * 25)
     templates = config['message_templates']
     for i, (name, template) in enumerate(templates.items(), 1):
-        print(f"  {i}️⃣  {name.title()}: {template}")
+        print(f"  {i}. {name.title()}: {template}")
     
-    print("\n⚙️  ADVANCED OPTIONS:")
-    print("─" * 25)
-    print(f"  5️⃣  Toggle telemetry mode (current: {current_mode})")
-    print("  6️⃣  Custom template editor")
-    print("  7️⃣  Preview message with current data")
-    print("  8️⃣  Back to configuration menu")
+    print("\nConfig:  ADVANCED OPTIONS:")
+    print("-" * 25)
+    print(f"  5.  Toggle telemetry mode (current: {current_mode})")
+    print("  6.  Custom template editor")
+    print("  7.  Preview message with current data")
+    print("  8.  Back to configuration menu")
     
-    choice = input("\n➤ Select option (1-8): ").strip()
+    choice = input("\n> Select option (1-8): ").strip()
     
     if choice in ['1', '2', '3', '4']:
         template_names = list(templates.keys())
@@ -496,26 +496,22 @@ def configure_telemetry_options(config):
         config['telemetry_mode'] = (selected_name in ['detailed', 'radio', 'full'])
         save_config(config)
         
-        print(f"\n✅ Template set to '{selected_name.title()}'")
+        print(f"\nSuccess: Template set to '{selected_name.title()}'")
         print(f"Telemetry mode: {'Enabled' if config['telemetry_mode'] else 'Disabled'}")
         
     elif choice == '5':
         config['telemetry_mode'] = not config.get('telemetry_mode', False)
         save_config(config)
         new_mode = "Enhanced" if config['telemetry_mode'] else "Basic"
-        print(f"\n✅ Telemetry mode: {new_mode}")
+        print(f"\nSuccess: Telemetry mode: {new_mode}")
         
     elif choice == '6':
-        print("\n📝 CUSTOM TEMPLATE EDITOR")
-        print("─" * 30)
+        print("\nEditor CUSTOM TEMPLATE EDITOR")
+        print("-" * 30)
         print("Available variables:")
-        print("  {timestamp} - Message time")
+        print("  {timestamp} - Message time (HH:MM:SS)")
         print("  {battery} - Battery percentage")
-        print("  {voltage} - Device voltage")
-        # Environmental sensors not connected
-        print("  {channel_util} - Channel utilization")
-        print("  {rssi} - Signal strength")
-        print("  {uptime} - Device uptime")
+        print("  {uptime} - Device uptime (auto-format: minutes/hours/days)")
         
         current = config.get('custom_message', '')
         print(f"\nCurrent: {current}")
@@ -525,17 +521,17 @@ def configure_telemetry_options(config):
             config['custom_message'] = new_template
             config['telemetry_mode'] = True  # Enable telemetry for custom templates
             save_config(config)
-            print("\n✅ Custom template saved!")
+            print("\nSuccess: Custom template saved!")
             
     elif choice == '7':
         preview_message_with_data(config)
         
-    input("\n⏸️  Press Enter to continue...")
+    input("\nPause:  Press Enter to continue...")
 
 def preview_message_with_data(config):
     """Preview what a message would look like with current data"""
-    print("\n🔎 MESSAGE PREVIEW")
-    print("─" * 20)
+    print("\nPreview MESSAGE PREVIEW")
+    print("-" * 20)
     
     try:
         # Create sample data
@@ -543,9 +539,6 @@ def preview_message_with_data(config):
         sample_data = {
             'timestamp': datetime.now().strftime("%H:%M:%S"),
             'battery': 87.3,
-            'voltage': 4.15,
-            'channel_util': 12.5,
-            'rssi': -42,
             'uptime': '2.3h'
         }
         
@@ -556,21 +549,20 @@ def preview_message_with_data(config):
             print(f"Template: {template}")
             print(f"Preview:  {preview}")
             
-            print(f"\n📊 Data includes:")
+            print(f"\nTelemetry: Data includes:")
             if config.get('telemetry_mode', False):
-                print("  ✅ Enhanced telemetry (voltage, signals, uptime)")
-                print("  ✅ Environmental sensors (temp/humidity)")
-                print("  ✅ Radio metrics (channel utilization, RSSI)")
+                print("  Success: Timestamp, battery percentage, and device uptime")
+                print("  Time: Simple, clean message format")
             else:
-                print("  • Basic battery and timestamp only")
-                print("  ℹ️ Enable telemetry mode for more data")
+                print("  - Basic battery and timestamp only")
+                print("  Info: Enable telemetry mode for uptime data")
                 
         except KeyError as e:
-            print(f"⚠️  Template error: Variable {e} not available")
+            print(f"Warning:  Template error: Variable {e} not available")
             print("Available variables listed in custom template editor")
             
     except Exception as e:
-        print(f"❌ Preview error: {e}")
+        print(f"Error: Preview error: {e}")
 
 def old_configure_message():
     """Legacy configure message function - keeping for reference"""
@@ -587,7 +579,7 @@ def old_configure_message():
                     freq = int(new_freq)
                     if 10 <= freq <= 3600:
                         config['message_frequency'] = freq
-                        print(f"✓ Frequency set to {freq} seconds")
+                        print(f"Success Frequency set to {freq} seconds")
                         break
                     else:
                         print("Frequency must be between 10 and 3600 seconds.")
@@ -598,7 +590,7 @@ def old_configure_message():
             to_node = input(f"\\nTarget node name (current: {config['to_node']}): ").strip()
             if to_node:
                 config['to_node'] = to_node
-                print(f"✓ Target node set to {to_node}")
+                print(f"Success Target node set to {to_node}")
                 
         elif choice == '3':
             # Configure node ID for private messaging
@@ -638,11 +630,11 @@ def old_configure_message():
             save_config(config)
             private_str = "private" if config.get('private_messages', True) else "broadcast"
             logger.info(f"Message configuration updated: freq={config['message_frequency']}s, target={config['to_node']}, node_id={config.get('to_node_id', 'auto')}, mode={private_str}")
-            print("\\n✓ Configuration saved successfully!")
+            print("\\nSuccess Configuration saved successfully!")
             
     except Exception as e:
         error_msg = f"Error configuring message: {str(e)}"
-        print(f"\\n✗ {error_msg}")
+        print(f"\\nError {error_msg}")
         logger.error(error_msg)
         
     input("\nPress Enter to continue...")
@@ -655,14 +647,14 @@ def start_messaging():
         
         if not serial_port:
             print("\n" + "=" * 50)
-            print("            ❌ SETUP REQUIRED")
+            print("            Error: SETUP REQUIRED")
             print("=" * 50)
-            print("\n📱 No device configured yet!")
-            print("\n💡 Quick setup options:")
+            print("\nSetup No device configured yet!")
+            print("\nTip: Quick setup options:")
             print("  1. Return to main menu and use 'Device Management'")
             print("  2. Use auto-detect to find your device")
             
-            choice = input("\n➤ Run auto-detect now? (y/N): ").strip().lower()
+            choice = input("\n> Run auto-detect now? (y/N): ").strip().lower()
             if choice == 'y':
                 auto_detect_devices()
                 # Try again with updated config
@@ -675,23 +667,23 @@ def start_messaging():
         
         # Pre-flight check
         print("\n" + "=" * 60)
-        print("              🚀 STARTING MESSAGING SERVICE")
+        print("              Start STARTING MESSAGING SERVICE")
         print("=" * 60)
         
         device_info = get_device_display_info(config)
-        print(f"\n📊 MISSION PARAMETERS:")
-        print("─" * 25)
-        print(f"📡 Device: {device_info[:35]}..." if len(device_info) > 35 else f"📡 Device: {device_info}")
-        print(f"📍 Port: {serial_port}")
-        print(f"🎯 Target: {config['to_node']}")
+        print(f"\nTelemetry: MISSION PARAMETERS:")
+        print("-" * 25)
+        print(f"Device: Device: {device_info[:35]}..." if len(device_info) > 35 else f"Device: Device: {device_info}")
+        print(f"Port: Port: {serial_port}")
+        print(f"Target: Target: {config['to_node']}")
         if config.get('to_node_id'):
-            print(f"🆔 Node ID: {config['to_node_id']}")
-        print(f"⏱️  Interval: Every {config['message_frequency']} seconds")
-        print(f"🔐 Mode: {'🔒 Private' if config.get('private_messages', True) else '📢 Broadcast'}")
-        print(f"💬 Format: [timestamp] Battery: percentage%")
+            print(f"ID: Node ID: {config['to_node_id']}")
+        print(f"Uptime:  Interval: Every {config['message_frequency']} seconds")
+        print(f"Mode: Mode: {'Private Private' if config.get('private_messages', True) else 'Broadcast Broadcast'}")
+        print(f"Template: Format: [timestamp] Battery: percentage%")
         
-        print("\n🔄 CONNECTING...")
-        print("─" * 20)
+        print("\nLoading CONNECTING...")
+        print("-" * 20)
         
         logger.info(f"Starting messaging service - Device: {serial_port}, Frequency: {config['message_frequency']}s")
         
@@ -707,16 +699,16 @@ def start_messaging():
         )
         
         if success:
-            print("\n✓ Connected successfully!")
+            print("\nSuccess Connected successfully!")
             print("\n" + "=" * 60)
-            print("              📡 MESHTASTIC MESSAGING ACTIVE")
+            print("              Device: MESHTASTIC MESSAGING ACTIVE")
             print("=" * 60)
-            print(f"🎯 Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
-            print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
-            print(f"🔐 Mode: {'Private messaging' if config.get('private_messages', True) else 'Broadcast'}")
-            print(f"💬 Template: {config.get('custom_message', 'Default')}")
-            print("\n📋 MESSAGE LOG:")
-            print("─" * 60)
+            print(f"Target: Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
+            print(f"Uptime:  Frequency: Every {config['message_frequency']} seconds")
+            print(f"Mode: Mode: {'Private messaging' if config.get('private_messages', True) else 'Broadcast'}")
+            print(f"Template: Template: {config.get('custom_message', 'Default')}")
+            print("\nMESSAGE LOG:")
+            print("-" * 60)
             
             # Start messaging in a separate thread
             def messaging_loop():
@@ -738,12 +730,17 @@ def start_messaging():
                             # Get comprehensive device telemetry
                             device_telemetry = comm.get_device_telemetry()
                             
-                            # Add all available data to template variables
+                            # Add only uptime data for simple messaging
+                            uptime_seconds = device_telemetry.get('uptime_seconds', 0) or 0
+                            if uptime_seconds < 3600:
+                                uptime_str = f"{uptime_seconds / 60:.0f}m"
+                            elif uptime_seconds < 86400:
+                                uptime_str = f"{uptime_seconds / 3600:.1f}h"
+                            else:
+                                uptime_str = f"{uptime_seconds / 86400:.1f}d"
+                            
                             message_data.update({
-                                'voltage': device_telemetry.get('voltage', 0.0) or 0.0,
-                                'channel_util': device_telemetry.get('channel_utilization', 0.0) or 0.0,
-                                'rssi': device_telemetry.get('rssi', 0) or 0,
-                                'uptime': f"{(device_telemetry.get('uptime_seconds', 0) or 0) / 3600:.1f}h"
+                                'uptime': uptime_str
                             })
                         
                         # Use custom message template with error handling
@@ -770,10 +767,10 @@ def start_messaging():
                         target_info = f"to {config['to_node']}" if private_mode else "(broadcast)"
                         
                         if success:
-                            print(f"[{log_timestamp}] ✅ SENT {target_info}: {message}")
+                            print(f"[{log_timestamp}] SENT {target_info}: {message}")
                             logger.info(f"Message sent to {config['to_node']}: {message}")
                         else:
-                            print(f"[{log_timestamp}] ❌ FAILED {target_info}: {message}")
+                            print(f"[{log_timestamp}] FAILED {target_info}: {message}")
                             logger.error(f"Failed to send message to {config['to_node']}: {message}")
                         
                         time.sleep(config['message_frequency'])
@@ -784,8 +781,8 @@ def start_messaging():
                     
             # Show initial status
             first_message_time = datetime.now() + timedelta(seconds=5)
-            print(f"🚀 Starting in 5 seconds... First message at {first_message_time.strftime('%H:%M:%S')}")
-            print("\n💡 Press Ctrl+C to stop and return to menu\n")
+            print(f"Starting in 5 seconds... First message at {first_message_time.strftime('%H:%M:%S')}")
+            print("\nPress Ctrl+C to stop and return to menu\n")
             time.sleep(5)  # Give user time to read the setup
             
             messaging_thread = threading.Thread(target=messaging_loop, daemon=True)
@@ -798,12 +795,12 @@ def start_messaging():
                 print("\n\nMessaging stopped by user.")
                 comm.stop_messaging()  # Stop messaging but keep connection alive
         else:
-            print("\n✗ Failed to connect to device")
+            print("\nError Failed to connect to device")
             print("Try using Test Connection option first to diagnose issues.")
             
     except Exception as e:
         error_msg = f"Error starting messaging: {str(e)}"
-        print(f"\n✗ {error_msg}")
+        print(f"\nError {error_msg}")
         logger.error(error_msg, exc_info=True)
         
     input("\nPress Enter to continue...")
@@ -950,11 +947,11 @@ def test_usb_scanning():
             devices = test_comm.scan_for_devices()
             
             if devices:
-                print(f"\n✓ Found {len(devices)} serial devices:")
+                print(f"\nSuccess Found {len(devices)} serial devices:")
                 for i, device in enumerate(devices, 1):
                     print(f"  {i}. {device['name']}")
             else:
-                print("\n✗ No serial devices found")
+                print("\nError No serial devices found")
                 print("This could mean:")
                 print("  - No Meshtastic devices are connected via USB")
                 print("  - Device drivers not installed")
@@ -1001,7 +998,7 @@ def test_connection_verbose():
         ble_address = config.get('ble_address')
         
         if not ble_address:
-            print("\n✗ No device configured. Please pair a device first.")
+            print("\nError No device configured. Please pair a device first.")
             return
             
         print("\n" + "=" * 40)
@@ -1034,22 +1031,22 @@ def test_connection_verbose():
             print(f"\nTest completed in {duration:.2f} seconds")
             
             if success:
-                print("\\n✓ CONNECTION TEST SUCCESSFUL!")
-                print("• USB/Serial connection established")
-                print("• Device is responding")
-                print("• Ready for messaging operations")
+                print("\\nSuccess CONNECTION TEST SUCCESSFUL!")
+                print("- USB/Serial connection established")
+                print("- Device is responding")
+                print("- Ready for messaging operations")
             else:
-                print("\n✗ CONNECTION TEST FAILED!")
-                print("• Could not establish connection")
-                print("• Check device power and range")
-                print("• Verify BLE address is correct")
+                print("\nError CONNECTION TEST FAILED!")
+                print("- Could not establish connection")
+                print("- Check device power and range")
+                print("- Verify BLE address is correct")
                 
         finally:
             # Restore logging level
             meshtastic_logger.setLevel(original_level)
             
     except Exception as e:
-        print(f"\n✗ Test error: {e}")
+        print(f"\nError Test error: {e}")
         logger.error(f"Error in test_connection_verbose: {e}", exc_info=True)
 
 def check_python_environment():
@@ -1092,9 +1089,9 @@ def check_python_environment():
         for file in key_files:
             if os.path.exists(file):
                 size = os.path.getsize(file)
-                print(f"  {file}: {size} bytes ✓")
+                print(f"  {file}: {size} bytes Success")
             else:
-                print(f"  {file}: MISSING ✗")
+                print(f"  {file}: MISSING Error")
                 
     except Exception as e:
         print(f"\nError checking Python environment: {e}")
@@ -1116,23 +1113,23 @@ def main():
         
         # Auto-start functionality
         if config.get('auto_start', True) and config.get('serial_port'):
-            auto_delay = config.get('auto_start_delay', 30)
-            print(f"\n🚀 AUTO-START ENABLED")
+            auto_delay = config.get('auto_start_delay', 10)
+            print(f"\nAUTO-START ENABLED")
             print(f"Will automatically start messaging in {auto_delay} seconds...")
             print("Press Ctrl+C to access menu instead")
             
             try:
                 # Simple countdown with interrupt
                 for remaining in range(auto_delay, 0, -1):
-                    print(f"\r🕒 Starting in {remaining:2d} seconds... (Ctrl+C to cancel)", end='', flush=True)
+                    print(f"\rStarting in {remaining:2d} seconds... (Ctrl+C to cancel)", end='', flush=True)
                     time.sleep(1)
                 
-                print("\n\n🚀 Auto-starting messaging service...")
+                print("\n\nAuto-starting messaging service...")
                 start_messaging()
                 return
                 
             except KeyboardInterrupt:
-                print("\n\n🛡️  Auto-start cancelled. Showing menu...")
+                print("\n\nAuto-start cancelled. Showing menu...")
         
         # Regular menu loop
         while True:
@@ -1176,15 +1173,15 @@ def main():
 
 def auto_detect_devices():
     """Auto-detect available Meshtastic devices"""
-    print("\n🔍 AUTO-DETECTING DEVICES...")
-    print("─" * 30)
+    print("\nDetecting: AUTO-DETECTING DEVICES...")
+    print("-" * 30)
     
     try:
         import meshtastic_comm
         devices = meshtastic_comm.scan_devices()
         
         if devices:
-            print(f"\n✅ Found {len(devices)} device(s):")
+            print(f"\nSuccess: Found {len(devices)} device(s):")
             for i, device in enumerate(devices, 1):
                 print(f"  {i}. {device}")
             
@@ -1194,10 +1191,10 @@ def auto_detect_devices():
                 config['serial_port'] = devices[0]
                 config['device_name'] = f"Device on {devices[0]}"
                 save_config(config)
-                print(f"\n✅ Automatically configured: {devices[0]}")
+                print(f"\nSuccess: Automatically configured: {devices[0]}")
             else:
                 # Let user choose
-                choice = input(f"\n➤ Select device (1-{len(devices)}): ").strip()
+                choice = input(f"\n> Select device (1-{len(devices)}): ").strip()
                 try:
                     idx = int(choice) - 1
                     if 0 <= idx < len(devices):
@@ -1205,15 +1202,15 @@ def auto_detect_devices():
                         config['serial_port'] = devices[idx]
                         config['device_name'] = f"Device on {devices[idx]}"
                         save_config(config)
-                        print(f"\n✅ Configured: {devices[idx]}")
+                        print(f"\nSuccess: Configured: {devices[idx]}")
                 except ValueError:
-                    print("❌ Invalid selection")
+                    print("Error: Invalid selection")
         else:
-            print("\n❌ No Meshtastic devices found")
-            print("💡 Make sure your device is connected via USB")
+            print("\nError: No Meshtastic devices found")
+            print("Tip: Make sure your device is connected via USB")
             
     except Exception as e:
-        print(f"\n❌ Auto-detection failed: {e}")
+        print(f"\nError: Auto-detection failed: {e}")
         logger.error(f"Auto-detection error: {e}")
 
 def get_device_display_info(config):
