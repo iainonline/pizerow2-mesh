@@ -10,6 +10,7 @@ import json
 import time
 import threading
 import logging
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple
 from meshtastic_comm import MeshtasticComm
 
@@ -82,33 +83,50 @@ def save_config(config: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Error saving config: {e}")
 
-def display_menu():
-    """Display the simplified main menu"""
-    config = load_config()
+def display_main_menu(config):
+    """Display the main application menu with improved layout"""
+    print("\n" + "=" * 60)
+    print("                MESHTASTIC USB CONTROLLER")
+    print("                   Raspberry Pi Edition")
+    print("=" * 60)
     
-    print("\n" + "=" * 50)
-    print("       MESHTASTIC USB CONTROLLER")
-    print("=" * 50)
+    # Status section
+    print("\n📊 CURRENT STATUS:")
+    print("─" * 30)
     
-    # Display current device info
-    device_info = "Not Connected"
-    if config.get('last_connected_device') and config.get('device_name'):
-        device_info = f"{config['device_name']} ({config['last_connected_device']})"
-    elif config.get('serial_port'):
-        device_info = config['serial_port']
+    # Device info
+    device_info = get_device_display_info(config)
+    if device_info:
+        print(f"📡 Device: {device_info[:50]}..." if len(device_info) > 50 else f"📡 Device: {device_info}")
+        print(f"🎯 Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
+        print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
+        print(f"🔐 Mode: {'Private' if config.get('private_messages', True) else 'Broadcast'}")
+    else:
+        print("❌ No device configured - Setup required")
     
-    print(f"Connected Device: {device_info}")
-    print(f"Message Frequency: {config['message_frequency']} seconds")
-    print(f"Target Node: {config['to_node']}")
+    print("\n🎮 QUICK ACTIONS:")
+    print("─" * 30)
+    if device_info:
+        print("  🚀 [S] Start Messaging (Quick Start)")
+        print("  🔧 [C] Configure Settings")
+    print("  📱 [D] Device Setup")
+    print("  🧪 [T] Test Connection")
     
-    print("\nOptions:")
-    print("  1. Pair / Change Device")
-    print("  2. Test Connection")
-    print("  3. Configure Message")
-    print("  4. Start Messaging")
-    print("  5. Debug & Diagnostics")
-    print("  6. Exit")
-    print("=" * 50)
+    print("\n⚙️  MAIN MENU:")
+    print("─" * 30)
+    print("  1️⃣  Device Management")
+    print("  2️⃣  Connection Test")
+    print("  3️⃣  Message Configuration")
+    print("  4️⃣  Run Program (with message log)")
+    print("  5️⃣  Diagnostics & Logs")
+    print("  6️⃣  Exit Application")
+    print("\n" + "=" * 60)
+    
+    # Show helpful hints
+    if device_info:
+        print("💡 Tip: Press 'S' for quick start or choose a number (1-6)")
+    else:
+        print("💡 Tip: Start with option 1 to configure your device")
     
 def pair_or_change_device():
     """Scan for and pair with a Meshtastic device"""
@@ -269,33 +287,165 @@ def test_connection():
     input("\nPress Enter to continue...")
 
 def configure_message():
-    """Configure message settings (frequency and target node)"""
-    try:
-        print("\n" + "=" * 40)
-        print("      MESSAGE CONFIGURATION")
-        print("=" * 40)
-        
+    """Configure message settings with improved interface"""
+    while True:
         config = load_config()
         
         # Add default custom message if not present
         if 'custom_message' not in config:
             config['custom_message'] = "[{timestamp}] Battery: {battery}%"
         
-        print(f"\nCurrent settings:")
-        print(f"  Frequency: {config['message_frequency']} seconds")
-        print(f"  Target Node: {config['to_node']}")
+        print("\n" + "=" * 50)
+        print("         MESSAGE CONFIGURATION")
+        print("=" * 50)
+        
+        print("\n📊 CURRENT SETTINGS:")
+        print("─" * 25)
+        print(f"🎯 Target Node: {config['to_node']}")
+        print(f"🆔 Node ID: {config.get('to_node_id', 'Auto-detect')}")
+        print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
+        print(f"🔐 Mode: {'🔒 Private' if config.get('private_messages', True) else '📢 Broadcast'}")
+        print(f"💬 Template: {config['custom_message']}")
+        
+        print("\n⚙️  CONFIGURATION OPTIONS:")
+        print("─" * 30)
+        print("  1️⃣  Change message frequency")
+        print("  2️⃣  Set target node name")
+        print("  3️⃣  Configure node ID")
+        print("  4️⃣  Toggle privacy mode")
+        print("  5️⃣  Back to main menu")
+        
+        print("\n" + "=" * 50)
+        
+        choice = input("\n➤ Select option (1-5): ").strip()
+        
+        if choice == '1':
+            configure_frequency(config)
+        elif choice == '2':
+            configure_target_node(config)
+        elif choice == '3':
+            configure_node_id(config)
+        elif choice == '4':
+            toggle_privacy_mode(config)
+        elif choice == '5':
+            break
+        else:
+            print("\n❌ Invalid choice. Please enter 1-5.")
+            input("\n⏸️  Press Enter to continue...")
+
+def configure_frequency(config):
+    """Configure message frequency with validation"""
+    print("\n⏱️  MESSAGE FREQUENCY SETUP")
+    print("─" * 30)
+    print(f"Current: Every {config['message_frequency']} seconds")
+    print("\nRecommended settings:")
+    print("  • 30s - High frequency (testing)")
+    print("  • 60s - Normal (recommended)")
+    print("  • 300s - Low frequency (5 min)")
+    print("  • 900s - Very low (15 min)")
+    
+    while True:
+        try:
+            new_freq = input("\n➤ Enter frequency in seconds (10-3600): ").strip()
+            if not new_freq:
+                return
+            
+            freq = int(new_freq)
+            if 10 <= freq <= 3600:
+                config['message_frequency'] = freq
+                save_config(config)
+                print(f"\n✅ Frequency set to {freq} seconds")
+                
+                # Show practical info
+                if freq < 60:
+                    print("⚠️  High frequency - good for testing")
+                elif freq <= 300:
+                    print("✅ Good balance of updates and battery life")
+                else:
+                    print("🔋 Low frequency - maximizes battery life")
+                break
+            else:
+                print("❌ Frequency must be between 10 and 3600 seconds")
+        except ValueError:
+            print("❌ Please enter a valid number")
+    
+    input("\n⏸️  Press Enter to continue...")
+
+def configure_target_node(config):
+    """Configure target node name"""
+    print("\n🎯 TARGET NODE SETUP")
+    print("─" * 25)
+    print(f"Current target: {config['to_node']}")
+    
+    new_target = input("\n➤ Enter target node name: ").strip()
+    if new_target:
+        config['to_node'] = new_target
+        save_config(config)
+        print(f"\n✅ Target node set to '{new_target}'")
+    
+    input("\n⏸️  Press Enter to continue...")
+
+def configure_node_id(config):
+    """Configure target node ID with validation"""
+    print("\n🆔 NODE ID CONFIGURATION")
+    print("─" * 30)
+    print(f"Current ID: {config.get('to_node_id', 'Auto-detect')}")
+    print("\nNode ID helps ensure private messages reach the right device.")
+    print("\n💡 Examples:")
+    print("  • 2658499212 (decimal format)")
+    print("  • Leave blank for auto-detection")
+    
+    node_id_input = input("\n➤ Enter node ID (or press Enter for auto): ").strip()
+    
+    if node_id_input:
+        try:
+            node_id = int(node_id_input)
+            config['to_node_id'] = node_id
+            save_config(config)
+            print(f"\n✅ Node ID set to {node_id}")
+        except ValueError:
+            print("\n❌ Invalid node ID. Please enter a decimal number.")
+    else:
         if config.get('to_node_id'):
-            print(f"  Target Node ID: {config['to_node_id']}")
-        print(f"  Message Template: {config['custom_message']}")
-        print(f"  Private Messages: {'Yes' if config.get('private_messages', True) else 'No (Broadcast)'}")
-        
-        print("\nWhat would you like to change?")
-        print("1. Message frequency")
-        print("2. Target node name")
-        print("3. Target node ID")
-        print("4. Privacy settings (private vs broadcast)")
-        print("5. Back to main menu")
-        
+            clear = input("\n❓ Clear existing node ID? (y/N): ").strip().lower()
+            if clear == 'y':
+                config['to_node_id'] = None
+                save_config(config)
+                print("\n✅ Node ID cleared - will use auto-detection")
+    
+    input("\n⏸️  Press Enter to continue...")
+
+def toggle_privacy_mode(config):
+    """Toggle between private and broadcast messaging"""
+    current_private = config.get('private_messages', True)
+    
+    print("\n🔐 PRIVACY MODE SELECTION")
+    print("─" * 30)
+    print(f"Current mode: {'🔒 Private' if current_private else '📢 Broadcast'}")
+    
+    print("\n📋 Options:")
+    print("  1️⃣  🔒 Private messages (sent to specific node only)")
+    print("  2️⃣  📢 Broadcast messages (visible to all nodes)")
+    
+    choice = input("\n➤ Choose mode (1/2): ").strip()
+    
+    if choice == '1':
+        config['private_messages'] = True
+        save_config(config)
+        print("\n✅ Private messaging enabled")
+        print("🔒 Messages will be sent only to your target node")
+    elif choice == '2':
+        config['private_messages'] = False
+        save_config(config)
+        print("\n✅ Broadcast messaging enabled")
+        print("📢 Messages will be visible to all nodes in the mesh")
+    
+    input("\n⏸️  Press Enter to continue...")
+
+def old_configure_message():
+    """Legacy configure message function - keeping for reference"""
+    try:
+        config = load_config()
         choice = input("\nChoice: ").strip()
         
         if choice == '1':
@@ -368,21 +518,50 @@ def configure_message():
     input("\nPress Enter to continue...")
 
 def start_messaging():
-    """Start the messaging service"""
+    """Start the messaging service with improved interface"""
     try:
         config = load_config()
         serial_port = config.get('last_connected_device') or config.get('serial_port')
         
         if not serial_port:
-            print("\n✗ No device paired. Please pair a device first.")
-            input("\nPress Enter to continue...")
-            return
+            print("\n" + "=" * 50)
+            print("            ❌ SETUP REQUIRED")
+            print("=" * 50)
+            print("\n📱 No device configured yet!")
+            print("\n💡 Quick setup options:")
+            print("  1. Return to main menu and use 'Device Management'")
+            print("  2. Use auto-detect to find your device")
+            
+            choice = input("\n➤ Run auto-detect now? (y/N): ").strip().lower()
+            if choice == 'y':
+                auto_detect_devices()
+                # Try again with updated config
+                config = load_config()
+                serial_port = config.get('serial_port')
+                if not serial_port:
+                    return
+            else:
+                return
         
-        device_name = config.get('device_name', 'Unknown')
-        print(f"\nStarting messaging with {device_name}...")
-        print(f"Frequency: Every {config['message_frequency']} seconds")
-        print(f"Target Node: {config['to_node']}")
-        print("\nConnecting to device...")
+        # Pre-flight check
+        print("\n" + "=" * 60)
+        print("              🚀 STARTING MESSAGING SERVICE")
+        print("=" * 60)
+        
+        device_info = get_device_display_info(config)
+        print(f"\n📊 MISSION PARAMETERS:")
+        print("─" * 25)
+        print(f"📡 Device: {device_info[:35]}..." if len(device_info) > 35 else f"📡 Device: {device_info}")
+        print(f"📍 Port: {serial_port}")
+        print(f"🎯 Target: {config['to_node']}")
+        if config.get('to_node_id'):
+            print(f"🆔 Node ID: {config['to_node_id']}")
+        print(f"⏱️  Interval: Every {config['message_frequency']} seconds")
+        print(f"🔐 Mode: {'🔒 Private' if config.get('private_messages', True) else '📢 Broadcast'}")
+        print(f"💬 Format: [timestamp] Battery: percentage%")
+        
+        print("\n🔄 CONNECTING...")
+        print("─" * 20)
         
         logger.info(f"Starting messaging service - Device: {serial_port}, Frequency: {config['message_frequency']}s")
         
@@ -399,7 +578,15 @@ def start_messaging():
         
         if success:
             print("\n✓ Connected successfully!")
-            print("Starting message transmission...")
+            print("\n" + "=" * 60)
+            print("              📡 MESHTASTIC MESSAGING ACTIVE")
+            print("=" * 60)
+            print(f"🎯 Target: {config['to_node']} (ID: {config.get('to_node_id', 'auto')})")
+            print(f"⏱️  Frequency: Every {config['message_frequency']} seconds")
+            print(f"🔐 Mode: {'Private messaging' if config.get('private_messages', True) else 'Broadcast'}")
+            print(f"💬 Template: {config.get('custom_message', 'Default')}")
+            print("\n📋 MESSAGE LOG:")
+            print("─" * 60)
             
             # Start messaging in a separate thread
             def messaging_loop():
@@ -429,10 +616,17 @@ def start_messaging():
                         private_mode = config.get('private_messages', True)
                         # Send simple message since sensor data is already included in the template
                         success = comm.send_message(message, include_battery=False, include_sensors=False, private=private_mode)
+                        
+                        # Enhanced logging with timestamp and status
+                        log_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        target_info = f"to {config['to_node']}" if private_mode else "(broadcast)"
+                        
                         if success:
-                            print(f"✓ Message sent: {message}")
+                            print(f"[{log_timestamp}] ✅ SENT {target_info}: {message}")
+                            logger.info(f"Message sent to {config['to_node']}: {message}")
                         else:
-                            print("✗ Failed to send message")
+                            print(f"[{log_timestamp}] ❌ FAILED {target_info}: {message}")
+                            logger.error(f"Failed to send message to {config['to_node']}: {message}")
                         
                         time.sleep(config['message_frequency'])
                         
@@ -440,8 +634,11 @@ def start_messaging():
                     print("\n\nStopping messaging...")
                     comm.disconnect()
                     
-            print(f"\nStarting periodic messaging every {config['message_frequency']} seconds...")
-            print("Press Ctrl+C to stop messaging and return to menu")
+            # Show initial status
+            first_message_time = datetime.now() + timedelta(seconds=5)
+            print(f"🚀 Starting in 5 seconds... First message at {first_message_time.strftime('%H:%M:%S')}")
+            print("\n💡 Press Ctrl+C to stop and return to menu\n")
+            time.sleep(5)  # Give user time to read the setup
             
             messaging_thread = threading.Thread(target=messaging_loop, daemon=True)
             messaging_thread.start()
@@ -768,10 +965,21 @@ def main():
     
     try:
         while True:
-            display_menu()
-            choice = input("\\nEnter your choice (1-6): ").strip()
+            config = load_config()
+            display_main_menu(config)
+            choice = input("\nEnter your choice (1-6, or S/C/D/T): ").strip().upper()
             
-            if choice == '1':
+            # Handle quick actions
+            if choice == 'S':
+                start_messaging()
+            elif choice == 'C':
+                configure_message()
+            elif choice == 'D':
+                pair_or_change_device()
+            elif choice == 'T':
+                test_connection()
+            # Handle numbered options
+            elif choice == '1':
                 pair_or_change_device()
             elif choice == '2':
                 test_connection()
@@ -794,6 +1002,61 @@ def main():
         print(f"An unexpected error occurred: {e}")
     finally:
         print("Goodbye!")
+
+def auto_detect_devices():
+    """Auto-detect available Meshtastic devices"""
+    print("\n🔍 AUTO-DETECTING DEVICES...")
+    print("─" * 30)
+    
+    try:
+        import meshtastic_comm
+        devices = meshtastic_comm.scan_devices()
+        
+        if devices:
+            print(f"\n✅ Found {len(devices)} device(s):")
+            for i, device in enumerate(devices, 1):
+                print(f"  {i}. {device}")
+            
+            if len(devices) == 1:
+                # Auto-select single device
+                config = load_config()
+                config['serial_port'] = devices[0]
+                config['device_name'] = f"Device on {devices[0]}"
+                save_config(config)
+                print(f"\n✅ Automatically configured: {devices[0]}")
+            else:
+                # Let user choose
+                choice = input(f"\n➤ Select device (1-{len(devices)}): ").strip()
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(devices):
+                        config = load_config()
+                        config['serial_port'] = devices[idx]
+                        config['device_name'] = f"Device on {devices[idx]}"
+                        save_config(config)
+                        print(f"\n✅ Configured: {devices[idx]}")
+                except ValueError:
+                    print("❌ Invalid selection")
+        else:
+            print("\n❌ No Meshtastic devices found")
+            print("💡 Make sure your device is connected via USB")
+            
+    except Exception as e:
+        print(f"\n❌ Auto-detection failed: {e}")
+        logger.error(f"Auto-detection error: {e}")
+
+def get_device_display_info(config):
+    """Get formatted device display information"""
+    if config.get('device_name'):
+        return config['device_name']
+    elif config.get('serial_port'):
+        return f"Device on {config['serial_port']}"
+    else:
+        return None
+
+def display_menu():
+    """Legacy display menu function - redirects to improved version"""
+    display_main_menu(load_config())
 
 if __name__ == "__main__":
     main()
