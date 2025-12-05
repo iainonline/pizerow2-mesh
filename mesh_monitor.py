@@ -37,7 +37,7 @@ class MeshtasticMonitor:
     def __init__(self, root):
         self.root = root
         self.root.title("Meshtastic Monitor - Real-Time Dashboard")
-        self.root.geometry("1400x900")
+        self.root.geometry("1200x800")
         self.root.configure(bg='#2b2b2b')
         
         # Configuration file
@@ -60,6 +60,10 @@ class MeshtasticMonitor:
         self.auto_send_interval = 300  # seconds (5 minutes default)
         self.selected_nodes: List[str] = []
         self.last_auto_send = 0
+        
+        # Signal strength tracking (for telemetry messages)
+        self.latest_snr: Optional[float] = None
+        self.latest_rssi: Optional[int] = None
         
         # Load configuration
         self.load_config()
@@ -240,6 +244,21 @@ class MeshtasticMonitor:
         self.auto_send_status = ttk.Label(auto_send_frame, text="Status: Disabled", style='TLabel', foreground='#888888')
         self.auto_send_status.pack(anchor=tk.W, pady=(5, 0))
         
+        # Last sent message preview
+        ttk.Label(auto_send_frame, text="Last Sent Message:", style='TLabel').pack(anchor=tk.W, pady=(10, 2))
+        
+        self.last_message_text = tk.Text(
+            auto_send_frame,
+            height=3,
+            width=30,
+            bg='#1e1e1e',
+            fg='#FFD700',
+            font=('Courier', 8),
+            state='disabled',
+            wrap=tk.WORD
+        )
+        self.last_message_text.pack(fill='x', pady=2)
+        
         # === BOTTOM SECTION: Message Feed ===
         messages_frame = ttk.LabelFrame(main_frame, text=" 📨 LoRa Traffic Feed (Real-Time) ", padding="10")
         messages_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
@@ -316,9 +335,18 @@ class MeshtasticMonitor:
             # Update stats
             self.stats['packets_rx'] += 1
             
-            # Get SNR if available
-            snr = packet.get('rxSnr', 'N/A')
-            snr_str = f"SNR: {snr:.1f}dB" if isinstance(snr, (int, float)) else ""
+            # Get and store signal strength
+            snr = packet.get('rxSnr')
+            rssi = packet.get('rxRssi')
+            
+            if isinstance(snr, (int, float)):
+                self.latest_snr = snr
+                snr_str = f"SNR: {snr:.1f}dB"
+            else:
+                snr_str = ""
+                
+            if isinstance(rssi, (int, float)):
+                self.latest_rssi = rssi
             
             # Process different packet types
             if portnum == 'TEXT_MESSAGE_APP':
@@ -378,31 +406,57 @@ class MeshtasticMonitor:
                 air_util = dm.get('airUtilTx')
                 uptime = dm.get('uptimeSeconds')
                 
-                # Store in history
-                self.telemetry_history.append({
+                # Store in history (create new entry or update last one)
+                telemetry_data = {
                     'time': time.time(),
                     'battery': battery,
                     'voltage': voltage,
                     'channel_util': channel_util,
                     'air_util': air_util
-                })
+                }
+                
+                # Check if we have recent telemetry to merge with
+                if self.telemetry_history and (time.time() - self.telemetry_history[-1].get('time', 0)) < 5:
+                    # Update existing entry
+                    self.telemetry_history[-1].update(telemetry_data)
+                else:
+                    # Create new entry
+                    self.telemetry_history.append(telemetry_data)
                 
             # Environment metrics
-            elif 'environmentMetrics' in payload:
+            if 'environmentMetrics' in payload:
                 em = payload['environmentMetrics']
                 temp = em.get('temperature')
                 humidity = em.get('relativeHumidity')
                 pressure = em.get('barometricPressure')
                 
+                # Update GUI labels (convert to Fahrenheit)
                 if temp is not None:
+                    temp_f = (temp * 9/5) + 32
                     self.root.after(0, self.temp_label.config, 
-                                   {'text': f"🌡️  Temperature: {temp:.1f}°C"})
+                                   {'text': f"🌡️  Temperature: {temp_f:.1f}°F"})
                 if humidity is not None:
                     self.root.after(0, self.humidity_label.config, 
                                    {'text': f"💧 Humidity: {humidity:.1f}%"})
                 if pressure is not None:
                     self.root.after(0, self.pressure_label.config, 
                                    {'text': f"🌀 Pressure: {pressure:.1f} hPa"})
+                
+                # Store in history (merge with recent device metrics if available)
+                env_data = {
+                    'time': time.time(),
+                    'temperature': temp,
+                    'humidity': humidity,
+                    'pressure': pressure
+                }
+                
+                # Check if we have recent telemetry to merge with
+                if self.telemetry_history and (time.time() - self.telemetry_history[-1].get('time', 0)) < 5:
+                    # Update existing entry with environment data
+                    self.telemetry_history[-1].update(env_data)
+                else:
+                    # Create new entry
+                    self.telemetry_history.append(env_data)
                     
         except Exception as e:
             self.log_message(f"⚠️  Error processing telemetry: {e}")
@@ -708,36 +762,70 @@ class MeshtasticMonitor:
         
         self.selected_nodes_text.config(state='disabled')
         
-    def get_telemetry_message(self) -> str:
-        """Generate telemetry message"""
-        lines = ["📊 Telemetry Report"]
-        lines.append(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    def get_telemetry_message(self, dest_node_id: Optional[str] = None) -> str:
+        """Generate telemetry message with BME280 sensor data priority"""
+        lines = [f"⏰ {datetime.now().strftime('%H:%M:%S')}"]
         
-        if self.telemetry_history:
+        # Get hop count to destination if available
+        if dest_node_id and self.interface and self.interface.nodes:
+            for node in self.interface.nodes.values():
+                node_num = node.get('num')
+                if node_num and f"!{node_num:08x}" == dest_node_id:
+                    hops_away = node.get('hopsAway', 0)
+                    if hops_away is not None and hops_away > 0:
+                        lines.append(f"🔗 Hops: {hops_away}")
+                    break
+        
+        # Check if we have telemetry data
+        if self.telemetry_history and len(self.telemetry_history) > 0:
             latest = self.telemetry_history[-1]
             
+            # PRIORITY 1: BME280 Environment Sensors
+            temp = latest.get('temperature')
+            if temp is not None:
+                temp_f = (temp * 9/5) + 32
+                lines.append(f"🌡️ {temp_f:.1f}°F")
+                
+            humidity = latest.get('humidity')
+            if humidity is not None:
+                lines.append(f"💧 {humidity:.1f}%")
+                
+            pressure = latest.get('pressure')
+            if pressure is not None:
+                lines.append(f"🔘 {pressure:.1f}hPa")
+            
+            # PRIORITY 2: Signal Strength
+            # Get SNR from most recent packet (if available)
+            if hasattr(self, 'latest_snr') and self.latest_snr is not None:
+                lines.append(f"📶 SNR: {self.latest_snr:.1f}dB")
+            
+            if hasattr(self, 'latest_rssi') and self.latest_rssi is not None:
+                lines.append(f"📡 RSSI: {self.latest_rssi}dBm")
+            
+            # PRIORITY 3: Battery & Power
             battery = latest.get('battery')
             if battery is not None:
                 if battery == 101:
-                    lines.append("🔋 Battery: Powered")
+                    lines.append("🔋 PWR")
                 else:
-                    lines.append(f"🔋 Battery: {battery}%")
+                    lines.append(f"🔋 {battery}%")
                     
             voltage = latest.get('voltage')
             if voltage is not None:
-                lines.append(f"⚡ Voltage: {voltage:.2f}V")
-                
+                lines.append(f"⚡ {voltage:.2f}V")
+            
+            # PRIORITY 4: Network Utilization
             channel_util = latest.get('channel_util')
             if channel_util is not None:
-                lines.append(f"📡 Channel: {channel_util:.1f}%")
+                lines.append(f"📻 CH:{channel_util:.1f}%")
                 
             air_util = latest.get('air_util')
             if air_util is not None:
-                lines.append(f"📶 Air TX: {air_util:.1f}%")
+                lines.append(f"🌐 Air:{air_util:.1f}%")
         
-        # Add stats
+        # Add node count
         if self.interface and self.interface.nodes:
-            lines.append(f"👥 Nodes: {len(self.interface.nodes)}")
+            lines.append(f"👥 {len(self.interface.nodes)}")
         
         return " | ".join(lines)
         
@@ -750,15 +838,25 @@ class MeshtasticMonitor:
         if not self.selected_nodes:
             messagebox.showwarning("No Nodes", "No nodes selected for auto-send.")
             return
-            
-        message = self.get_telemetry_message()
         
         try:
+            last_message = None
             for node_id in self.selected_nodes:
+                # Generate message with hop count for this specific node
+                message = self.get_telemetry_message(dest_node_id=node_id)
+                last_message = message  # Store for display
+                
                 # Send as direct message (encrypted, only recipient can read)
                 self.interface.sendText(message, destinationId=node_id, wantAck=True)
                 self.stats['packets_tx'] += 1
                 self.log_message(f"📤 Sent private telemetry DM to {node_id}", 'sent')
+            
+            # Display the last sent message in the GUI
+            if last_message:
+                self.last_message_text.config(state='normal')
+                self.last_message_text.delete('1.0', tk.END)
+                self.last_message_text.insert('1.0', last_message)
+                self.last_message_text.config(state='disabled')
             
             messagebox.showinfo("Sent", f"Telemetry sent to {len(self.selected_nodes)} nodes.")
         except Exception as e:
