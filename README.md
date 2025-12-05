@@ -1,321 +1,407 @@
-# Meshtastic Bluetooth Controller
+# Meshtastic Monitor Dashboard
 
-A Python application for Bluetooth Low Energy (BLE) communication with Heltec V3 Meshtastic devices on Raspberry Pi 5. This project provides an interactive menu interface for configuring message frequency, monitoring battery levels, and managing node-to-node communication.
+A real-time GUI monitoring dashboard for Meshtastic mesh networks on Raspberry Pi. Monitor telemetry, nodes, messages, and network statistics while sending encrypted private telemetry reports to selected nodes.
 
-![Raspberry Pi 5](https://img.shields.io/badge/Raspberry%20Pi-5-red?style=flat-square&logo=raspberry-pi)
+![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-red?style=flat-square&logo=raspberry-pi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
-![Meshtastic](https://img.shields.io/badge/Meshtastic-Compatible-green?style=flat-square)
-![Heltec V3](https://img.shields.io/badge/Heltec-V3-orange?style=flat-square)
+![Meshtastic](https://img.shields.io/badge/Meshtastic-2.5.0+-green?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 ## Features
 
-- 🔗 **BLE Communication**: Connect to Heltec V3 devices via Bluetooth Low Energy
-- 📱 **Interactive Menu**: User-friendly command-line interface
-- ⚡ **Configurable Frequency**: Set custom message sending intervals
-- 🔋 **Battery Monitoring**: Real-time battery level reporting
-- 🏷️ **Node Management**: Configure source and destination node names
-- 🔍 **Device Scanning**: Automatic BLE device discovery
-- 🐍 **Virtual Environment**: Isolated Python environment with automatic setup
-- 📝 **Configuration Persistence**: Settings saved to JSON file
-- 📊 **Comprehensive Logging**: Detailed logging for debugging
+### 📊 Real-Time Monitoring
+- **Device Telemetry**: Battery level, voltage, channel utilization, air utilization, uptime
+- **Environment Sensors**: Temperature, humidity, barometric pressure (when available)
+- **Mesh Nodes**: Live list with SNR values and last-heard timestamps
+- **Network Statistics**: Total nodes, online nodes, packet counts, message counts
+- **LoRa Traffic Feed**: Color-coded real-time message feed
+
+### 🚀 Auto-Send Telemetry
+- **Scheduled Reporting**: Automatically send telemetry reports at configurable intervals
+- **Node Selection**: Choose specific nodes to receive reports via intuitive GUI
+- **Private Messages**: Uses encrypted Direct Messages (DM) - only recipients can decrypt
+- **Configuration Persistence**: Settings saved across sessions
+
+### 🛡️ Security
+- **PKC Encryption**: Automatic Public Key Cryptography for DMs (firmware 2.5.0+)
+- **Channel Encryption**: Supports AES128/AES256 channel-based encryption
+- **No Spam**: Private messages don't clutter public channels
+
+### 🎨 User Interface
+- **Dark Theme**: Easy on the eyes for long monitoring sessions
+- **Live Updates**: Real-time refresh without performance impact
+- **Click-to-Select**: Intuitive node selection with visual feedback
+- **Countdown Timer**: Shows time until next auto-send
 
 ## Hardware Requirements
 
-### Primary Device
+### Raspberry Pi
 - **Raspberry Pi 5** (recommended)
-  - Other Raspberry Pi models may work but are not officially supported
-  - Ensure Bluetooth is enabled and working
+- Raspberry Pi 4/3 (compatible)
+- **USB Port**: For serial connection to Meshtastic device
 
 ### Meshtastic Device
-- **Heltec WiFi LoRa 32 V3** (ESP32-S3 based)
-  - Must have Meshtastic firmware installed
-  - Bluetooth must be enabled in device settings
-
-### Optional
-- UPS/Battery pack for Raspberry Pi (for portable operation)
+- **Heltec WiFi LoRa 32 V3** (tested)
+- Other Meshtastic-compatible devices with USB serial support
+- **Firmware**: v2.5.0 or higher (for PKC encryption features)
 
 ## Software Requirements
 
-- **Operating System**: Raspberry Pi OS (Bookworm recommended)
+- **Operating System**: Raspberry Pi OS (Bookworm/Bullseye)
 - **Python**: 3.9 or higher
-- **Bluetooth**: BlueZ stack with working BLE support
+- **Packages**: tkinter (usually included), meshtastic, pypubsub
+
+## Installation
+
+### 1. Clone Repository
+
+```
+
+### 2. Install Dependencies
+
+```bash
+# Ensure tkinter is installed (usually pre-installed on Raspberry Pi OS)
+sudo apt-get install python3-tk
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install Python packages
+pip install meshtastic pypubsub
+```
+
+### 3. Connect Device
+
+```bash
+# Connect Heltec V3 via USB cable
+# Device should appear as /dev/ttyUSB0 (or similar)
+
+# Check connection
+ls -l /dev/ttyUSB*
+
+# Add user to dialout group if needed
+sudo usermod -a -G dialout $USER
+# (logout/login required after this)
+```
 
 ## Quick Start
 
-### 1. Clone or Download
+### Running the Monitor
 
 ```bash
-# If using git
-git clone <repository-url>
-cd Meshtastic
+# Activate virtual environment
+source venv/bin/activate
 
-# Or download and extract the files to a directory
+# Run the monitor dashboard
+python mesh_monitor.py
 ```
 
-### 2. First-Time Setup
+Or use the convenience script:
 
 ```bash
-# Make the startup script executable
+# Make executable (first time only)
 chmod +x start.sh
 
-# Run setup (installs dependencies, creates virtual environment)
-./start.sh --setup
-```
-
-### 3. Run the Application
-
-```bash
-# Start the application
+# Run with virtual environment activation
 ./start.sh
 ```
 
-## Installation Guide
+## Using the Dashboard
 
-### Prerequisites Installation
+### Main Interface
 
-```bash
-# Update system packages
-sudo apt update && sudo apt upgrade -y
+The dashboard is divided into four main sections:
 
-# Install required system packages
-sudo apt install -y python3 python3-pip python3-venv bluez bluetooth
+1. **Top Left - Device Telemetry**
+   - Real-time battery, voltage, and utilization metrics
+   - Environment sensor readings (temperature, humidity, pressure)
 
-# Ensure Bluetooth service is running
-sudo systemctl enable bluetooth
-sudo systemctl start bluetooth
+2. **Bottom Left - Mesh Nodes**
+   - Live list of all nodes on the mesh
+   - SNR values and last-heard timestamps
+   - Automatically updates as nodes are discovered
 
-# Add user to bluetooth group (logout/login required after this)
-sudo usermod -a -G bluetooth $USER
-```
+3. **Top Right - Network Statistics**
+   - Total nodes, packets sent/received
+   - Message counts
 
-### Project Setup
+4. **Bottom Right - Auto-Send Control**
+   - Enable/disable automatic telemetry reports
+   - Configure sending interval
+   - Select recipient nodes
+   - Test send button
 
-1. **Download Project Files**
-   ```bash
-   # Create project directory
-   mkdir ~/meshtastic-bluetooth
-   cd ~/meshtastic-bluetooth
-   
-   # Copy all project files to this directory
-   ```
+5. **Bottom - LoRa Traffic Feed**
+   - Real-time message log with color coding
+   - Shows all mesh traffic including your sent messages
 
-2. **Configure Permissions**
-   ```bash
-   # Make startup script executable
-   chmod +x start.sh
-   ```
+### Sending Telemetry Reports
 
-3. **Initial Setup**
-   ```bash
-   # Run comprehensive setup
-   ./start.sh --setup
-   ```
+1. **Wait for nodes to appear** in the Mesh Nodes list
+2. **Click "Select Nodes"** button
+3. **Click nodes to toggle selection** (they'll highlight green)
+4. **Click "Save Selection"** to confirm
+5. **Set your desired interval** in seconds (minimum 30)
+6. **Enable "Auto-Send"** checkbox
+7. **Monitor the countdown** - telemetry will be sent automatically
 
-4. **Verify Installation**
-   ```bash
-   # Check system requirements
-   ./start.sh --check
-   ```
+### Test Before Auto-Send
 
-## Usage Guide
+Use the **"Test Send Now"** button to immediately send a telemetry report to your selected nodes and verify it's working.
 
-### Starting the Application
+## Configuration Files
 
-```bash
-./start.sh
-```
+### monitor_config.json
 
-### Menu Options
+Automatically created on first save. Stores:
+- `auto_send_enabled`: Whether auto-send is active
+- `auto_send_interval`: Seconds between sends
+- `selected_nodes`: List of node IDs to receive reports
 
-1. **Set message frequency** - Configure how often messages are sent (in seconds)
-2. **Set node names** - Configure source and destination node names
-3. **Set BLE address** - Specify device address or use auto-scan
-4. **Scan for BLE devices** - Discover available Meshtastic devices
-5. **Start/Stop messaging** - Toggle automatic message transmission
-6. **View device battery level** - Check current battery status
-7. **Send test message** - Send a custom message immediately
-8. **View connection status** - Display connection and configuration details
-9. **Exit** - Close the application
-
-### Configuration
-
-Settings are automatically saved to `config.json`:
-
+Example:
 ```json
 {
-  "message_frequency": 60,
-  "from_node": "HeltecV3_1",
-  "to_node": "HeltecV3_2", 
-  "ble_address": null,
-  "auto_scan": true
+  "auto_send_enabled": true,
+  "auto_send_interval": 300,
+  "selected_nodes": ["!a1b2c3d4", "!e5f6g7h8"]
 }
 ```
 
-### Automatic Messaging
+## Telemetry Configuration
 
-When enabled, the application sends periodic messages with:
-- Source and destination node names
-- Message counter
-- Current battery level percentage
-- Timestamp
+### Setting Telemetry Intervals
 
-Example message format:
+Use the included `set_telemetry.py` script to configure device telemetry broadcast intervals:
+
+```bash
+source venv/bin/activate
+python set_telemetry.py
 ```
-[HeltecV3_1→HeltecV3_2] Auto message #5 from HeltecV3_1 | Battery: 87.3%
-```
+
+This sets both environment and device telemetry intervals to 60 seconds.
+
+## Security & Privacy
+
+### Encryption
+
+**Direct Messages (Auto-Send)**:
+- Uses PKC (Public Key Cryptography) automatically on firmware 2.5.0+
+- Only the selected recipient can decrypt messages
+- Messages are signed to verify sender identity
+- No private data visible to other mesh participants
+
+**Channel Messages**:
+- Use the primary channel's PSK (Pre-Shared Key)
+- All nodes on the channel can decrypt if they have the PSK
+- Change PSK for enhanced privacy
+
+### Best Practices
+
+- ✅ Keep firmware updated (2.5.0+ recommended)
+- ✅ Use Direct Messages for sensitive telemetry
+- ✅ Change default channel PSK on primary channel
+- ✅ Don't send telemetry more frequently than needed
+- ✅ Monitor your air utilization percentage
 
 ## Troubleshooting
 
-### Common Issues
+### Connection Issues
 
-**Bluetooth Connection Failed**
+**Device Not Connecting**
 ```bash
-# Check Bluetooth status
-sudo systemctl status bluetooth
+# Check USB connection
+ls -l /dev/ttyUSB*
 
-# Restart Bluetooth service
-sudo systemctl restart bluetooth
+# Verify permissions
+sudo usermod -a -G dialout $USER
+# Logout/login required
 
-# Verify user permissions
-groups | grep bluetooth
+# Try different USB port
+# Check USB cable quality
 ```
 
-**Device Not Found**
-- Ensure Heltec V3 has Meshtastic firmware installed
-- Verify Bluetooth is enabled on the Meshtastic device
-- Try manual device scanning from the menu
-- Check device is in range (< 10 meters recommended)
-
-**Permission Denied Errors**
+**GUI Not Starting**
 ```bash
-# Add user to bluetooth group
-sudo usermod -a -G bluetooth $USER
+# Ensure tkinter is installed
+sudo apt-get install python3-tk
 
-# Logout and login again, then retry
+# Check X11 display
+echo $DISPLAY  # Should show :0 or similar
+
+# If using SSH, enable X11 forwarding
+ssh -X user@raspberrypi
 ```
 
-**Python Import Errors**
+**ImportError: No module named 'meshtastic'**
 ```bash
-# Reinstall dependencies
-./start.sh --setup
-
-# Or manually activate venv and install
+# Activate virtual environment first
 source venv/bin/activate
+
+# Reinstall dependencies
 pip install -r requirements.txt
 ```
 
-### Raspberry Pi 5 Specific Notes
+### Performance Issues
 
-- **Bluetooth Performance**: Pi 5 has significantly improved Bluetooth performance
-- **Power Management**: Consider using a UPS for mobile applications
-- **GPIO Access**: Ensure user has GPIO permissions if using hardware features
-- **WiFi Interference**: 2.4GHz WiFi may interfere with Bluetooth; consider using 5GHz WiFi
+**Slow GUI Updates**
+- Close other applications to free memory
+- Reduce auto-send frequency
+- Check system load: `htop`
 
-### Debug Mode
+**High Air Utilization**
+- Increase auto-send interval (minimum 30 seconds recommended)
+- Reduce number of recipients
+- Check other devices on mesh
 
-Enable detailed logging by modifying the main.py file:
+### Common Errors
 
-```python
-logging.basicConfig(
-    level=logging.DEBUG,  # Change from INFO to DEBUG
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+**"Permission denied: '/dev/ttyUSB0'"**
+```bash
+sudo usermod -a -G dialout $USER
+# Logout and login again
 ```
+
+**"No nodes appearing"**
+- Wait 30-60 seconds for initial discovery
+- Ensure other nodes are powered on and in range
+- Check device firmware version compatibility
 
 ## Project Structure
 
 ```
-meshtastic-bluetooth/
-├── main.py              # Main application with menu interface
-├── meshtastic_comm.py   # Bluetooth communication handler
-├── start.sh             # Startup script with venv management
-├── requirements.txt     # Python dependencies
-├── config.json          # Configuration file
-├── README.md            # This file
-├── .github/
-│   └── copilot-instructions.md  # Project documentation
-└── venv/                # Virtual environment (created by script)
+Meshtastic/
+├── mesh_monitor.py          # Main GUI dashboard application
+├── set_telemetry.py        # Telemetry configuration utility
+├── start.sh                # Convenience startup script
+├── requirements.txt        # Python dependencies
+├── monitor_config.json     # Auto-send configuration (auto-created)
+├── README.md               # This file
+└── venv/                   # Virtual environment (create locally)
 ```
+
+## Files Description
+
+### mesh_monitor.py
+Main dashboard application with GUI interface. Monitors mesh network in real-time and manages auto-send telemetry feature.
+
+### set_telemetry.py
+Utility script to configure device telemetry broadcast intervals (environment and device metrics).
+
+### start.sh
+Bash script that activates virtual environment and launches mesh_monitor.py. Makes running the application easier.
+
+### requirements.txt
+Lists Python package dependencies:
+- `meshtastic` - Official Meshtastic Python API
+- `pypubsub` - Publish-subscribe messaging library
+
+### monitor_config.json
+Auto-generated configuration file storing auto-send settings and selected nodes. Created on first save operation.
 
 ## Dependencies
 
 ### Python Packages
-- **meshtastic** (>=2.7.0) - Official Meshtastic Python API
-- **bleak** (>=0.21.0) - Bluetooth Low Energy platform integration
-- **psutil** (>=5.9.0) - System and process utilities
+- **meshtastic** - Meshtastic device communication
+- **pypubsub** - Event-driven messaging
+- **tkinter** - GUI framework (pre-installed on most systems)
 
-### System Dependencies
-- **BlueZ** - Linux Bluetooth protocol stack
-- **Python 3.9+** - Core Python interpreter
-- **pip** - Python package manager
-
-## Advanced Configuration
-
-### Custom BLE Settings
-
-Modify `meshtastic_comm.py` to adjust BLE parameters:
-
-```python
-# Connection timeout (seconds)
-timeout=30
-
-# Auto-reconnection attempts
-retry_attempts=3
+### System Requirements
+- **Python 3.9+** - Core interpreter
+- **USB Serial drivers** - For device connection
+- **X11 Display** - For GUI (available on Raspberry Pi OS desktop)
 
 # Message send interval
 default_frequency=60
 ```
 
-### Logging Configuration
+## Tips & Best Practices
 
-Customize logging in `main.py`:
+### Optimal Settings
 
-```python
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('meshtastic.log'),
-        logging.StreamHandler()
-    ]
-)
-```
+**Auto-Send Interval**:
+- Minimum: 30 seconds
+- Recommended: 300 seconds (5 minutes)
+- Consider mesh size and traffic
+
+**Node Selection**:
+- Select only nodes that need your telemetry
+- Fewer recipients = lower air utilization
+- Test with one node first
+
+**Monitoring**:
+- Watch air utilization % - keep under 10%
+- Monitor channel utilization
+- Check SNR values regularly
+
+### Power Management
+
+**For Battery Operation**:
+- Increase telemetry intervals
+- Reduce screen brightness
+- Consider scheduled operation only
+
+**For Always-On**:
+- Use powered USB hub if connecting multiple devices
+- Monitor Raspberry Pi temperature
+- Ensure adequate ventilation
 
 ## Contributing
 
+Contributions welcome! Please:
+
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Test thoroughly on Raspberry Pi
+4. Commit with clear messages
 5. Open a Pull Request
 
 ## License
 
-This project is open source. Please check the repository for specific license terms.
+This project is provided as-is for use with Meshtastic devices. See LICENSE file for details.
 
-## Support
+## Support & Resources
 
-For issues and questions:
+**Documentation**:
+- [Meshtastic Official Docs](https://meshtastic.org/docs/)
+- [Meshtastic Python API](https://python.meshtastic.org/)
+- [Raspberry Pi Documentation](https://www.raspberrypi.org/documentation/)
 
-1. Check this README and troubleshooting section
-2. Review the [Meshtastic documentation](https://meshtastic.org/docs/)
-3. Check [Raspberry Pi forums](https://www.raspberrypi.org/forums/) for Pi-specific issues
-4. Open an issue in the project repository
+**Community**:
+- [Meshtastic Discord](https://discord.gg/meshtastic)
+- [Meshtastic Forum](https://meshtastic.discourse.group/)
+
+**Troubleshooting**:
+- Check GitHub issues for known problems
+- Review Meshtastic firmware compatibility
+- Verify Python version compatibility
 
 ## Acknowledgments
 
-- [Meshtastic Project](https://meshtastic.org/) - For the excellent mesh networking platform
-- [Heltec Automation](https://heltec.org/) - For the V3 hardware platform  
-- [Raspberry Pi Foundation](https://www.raspberrypi.org/) - For the Pi 5 platform
-- Python community - For the excellent libraries and tools
+- **Meshtastic Project** - Excellent mesh networking platform and Python API
+- **Heltec Automation** - Quality LoRa hardware
+- **Raspberry Pi Foundation** - Reliable computing platform
+- **Python Community** - Robust libraries and tools
 
 ## Changelog
 
-### v1.0.0
-- Initial release with full BLE communication support
-- Interactive menu interface
-- Automatic virtual environment setup
-- Raspberry Pi 5 optimization
-- Battery monitoring integration
-- Configurable message frequency
-- Persistent configuration storage
+### v2.0.0 (Current)
+- Complete GUI dashboard with real-time monitoring
+- Auto-send telemetry with encrypted Direct Messages
+- Node selection interface with persistence
+- Network statistics and LoRa traffic feed
+- Environment sensor support
+- PKC encryption support (firmware 2.5.0+)
+- USB serial connection (removed BLE dependency)
+- Dark theme GUI optimized for long sessions
+
+### v1.0.0 (Legacy)
+- BLE communication support
+- CLI menu interface
+- Basic telemetry monitoring
+
+---
+
+**Made for the Meshtastic community 📡**

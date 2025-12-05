@@ -47,12 +47,15 @@ Thumbs.db
 *.log
 logs/
 
-# Configuration (keep template)
+# Configuration files
 config.json
+monitor_config.json
 
 # Temporary files
 *.tmp
 *.bak
-# PyInstaller build directories
+
+# Build directories
 build/
 dist/
+start.sh.backup

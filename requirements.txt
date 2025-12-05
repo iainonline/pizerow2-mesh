@@ -1,5 +1,2 @@
-meshtastic>=2.7.0
-pyserial>=3.5
-psutil>=5.9.0
+meshtastic>=2.3.0
 pypubsub>=4.0.3
-Adafruit_DHT>=1.4.0
