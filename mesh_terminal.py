@@ -768,6 +768,11 @@ class MeshtasticTerminal:
             elif choice == 'N':
                 self.send_new_message(node_list)
             elif choice.isdigit():
+                # If they pressed a digit, get the rest of the number
+                print(choice, end='', flush=True)  # Show the first digit
+                rest = self.get_line_input("").strip()  # Get remaining digits
+                choice = choice + rest  # Combine them
+                
                 idx = int(choice) - 1
                 if 0 <= idx < len(node_list):
                     self.view_conversation(node_list[idx])
@@ -882,6 +887,11 @@ class MeshtasticTerminal:
             return
         
         if choice.isdigit():
+            # If they pressed a digit, get the rest of the number
+            print(choice, end='', flush=True)  # Show the first digit
+            rest = self.get_line_input("").strip()  # Get remaining digits
+            choice = choice + rest  # Combine them
+            
             idx = int(choice) - 1
             if 0 <= idx < len(node_list):
                 node_id = node_list[idx]
@@ -1400,7 +1410,12 @@ class MeshtasticTerminal:
                         self.selected_nodes = []
                         self.logger.info("Cleared all selected nodes")
                     elif choice.isdigit():
-                        idx = int(choice) - 1
+                        # If they pressed a digit, get the rest of the number
+                        print(choice, end='', flush=True)  # Show the first digit
+                        rest = self.get_line_input("").strip()  # Get remaining digits
+                        full_choice = choice + rest  # Combine them
+                        
+                        idx = int(full_choice) - 1
                         if 0 <= idx < len(nodes_list):
                             node_id = nodes_list[idx]
                             if node_id in self.selected_nodes:
