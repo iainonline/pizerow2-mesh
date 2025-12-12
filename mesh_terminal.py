@@ -1648,34 +1648,36 @@ def main():
             last_display = 0
             display_interval = 1  # Update every 1 second
             
-            while True:
-                # Update display every 1 second
-                if time.time() - last_display >= display_interval:
-                    terminal.display_auto_send_status()
-                    last_display = time.time()
+            # Set terminal to cbreak mode for single character input
+            old_settings = termios.tcgetattr(sys.stdin)
+            try:
+                tty.setcbreak(sys.stdin.fileno())
                 
-                # Check for key press with short timeout
-                if select.select([sys.stdin], [], [], 0.5)[0]:
-                    # Read single character without waiting for Enter
-                    old_settings = termios.tcgetattr(sys.stdin)
-                    try:
-                        tty.setraw(sys.stdin.fileno())
-                        key = sys.stdin.read(1).upper()
-                    finally:
-                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                while True:
+                    # Update display every 1 second
+                    if time.time() - last_display >= display_interval:
+                        terminal.display_auto_send_status()
+                        last_display = time.time()
                     
-                    if key == 'M':
-                        terminal.logger.info("User pressed M to enter menu")
-                        print("\nEntering menu...")
-                        time.sleep(1)
-                        break
-                    elif key == 'S':
-                        terminal.logger.info("User pressed S to send message")
-                        terminal.message_interface()
-                        terminal.clear_screen()
-                        terminal.print_header()
-                
-                time.sleep(0.5)
+                    # Check for key press with short timeout
+                    if select.select([sys.stdin], [], [], 0.5)[0]:
+                        key = sys.stdin.read(1).upper()
+                        
+                        if key == 'M':
+                            terminal.logger.info("User pressed M to enter menu")
+                            print("\nEntering menu...")
+                            time.sleep(1)
+                            break
+                        elif key == 'S':
+                            terminal.logger.info("User pressed S to send message")
+                            terminal.message_interface()
+                            terminal.clear_screen()
+                            terminal.print_header()
+                    
+                    time.sleep(0.5)
+            finally:
+                # Restore terminal settings
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         except KeyboardInterrupt:
             # Ctrl+C will be handled by signal handler
             pass
