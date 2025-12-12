@@ -1550,6 +1550,62 @@ class MeshtasticTerminal:
         print("💡 TIP: Try sending a test message and check the log for details")
         print()
         self.get_single_key("Press any key to continue...")
+    
+    def run_auto_send_dashboard(self):
+        """Run the auto-send dashboard with live updates"""
+        import select
+        
+        # Send immediately on entry
+        self.clear_screen()
+        self.print_header()
+        print("\n📤 Sending initial telemetry...")
+        self.send_telemetry()
+        time.sleep(1)
+        
+        # Send keyword command information
+        print("📋 Sending keyword command info...")
+        self.send_keyword_info()
+        time.sleep(2)
+        
+        # Display loop with status updates
+        try:
+            last_display = 0
+            display_interval = 1  # Update every 1 second
+            
+            # Set terminal to cbreak mode for single character input
+            old_settings = termios.tcgetattr(sys.stdin)
+            try:
+                tty.setcbreak(sys.stdin.fileno())
+                
+                while True:
+                    # Update display every 1 second
+                    if time.time() - last_display >= display_interval:
+                        self.display_auto_send_status()
+                        last_display = time.time()
+                    
+                    # Check for key press with short timeout
+                    if select.select([sys.stdin], [], [], 0.5)[0]:
+                        key = sys.stdin.read(1).upper()
+                        
+                        if key == 'M':
+                            self.logger.info("User pressed M to return to menu")
+                            print("\nReturning to menu...")
+                            time.sleep(1)
+                            return
+                        elif key == 'S':
+                            self.logger.info("User pressed S to send message")
+                            self.message_interface()
+                            self.clear_screen()
+                            self.print_header()
+                    
+                    time.sleep(0.5)
+            finally:
+                # Restore terminal settings
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        except KeyboardInterrupt:
+            # Return to menu on Ctrl+C
+            print("\nReturning to menu...")
+            time.sleep(1)
         
     def main_menu(self):
         """Display main menu"""
@@ -1567,7 +1623,9 @@ class MeshtasticTerminal:
             print("2. Configure Auto-Send")
             print("3. Send Telemetry Now")
             print("4. Manage Encryption Keys")
-            print("5. Exit")
+            print("5. Start Auto-Send Dashboard")
+            print("6. View Dashboard")
+            print("7. Exit")
             print()
             
             choice = self.get_single_key("Enter choice: ").strip()
@@ -1582,6 +1640,25 @@ class MeshtasticTerminal:
             elif choice == '4':
                 self.manage_keys()
             elif choice == '5':
+                # Start auto-send dashboard mode
+                if not self.auto_send_enabled:
+                    print("\n⚠️  Auto-send is disabled. Enable it in Configure Auto-Send first.")
+                    time.sleep(2)
+                elif not self.selected_nodes:
+                    print("\n⚠️  No nodes selected. Configure nodes in Auto-Send settings first.")
+                    time.sleep(2)
+                else:
+                    print("\nStarting auto-send dashboard...")
+                    time.sleep(1)
+                    # Run the auto-send dashboard loop
+                    self.run_auto_send_dashboard()
+            elif choice == '6':
+                # View dashboard without auto-send
+                print("\nOpening dashboard view...")
+                time.sleep(1)
+                self.display_auto_send_status()
+                self.get_single_key("\nPress any key to return to menu...")
+            elif choice == '7':
                 print("\nExiting...")
                 sys.exit(0)
                 
