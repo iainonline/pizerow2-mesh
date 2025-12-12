@@ -42,7 +42,7 @@ class MeshtasticTerminal:
         
         # Recent activity tracking
         self.recent_activity = []  # List of recent packet activity
-        self.max_activity_items = 20  # Keep last 20 items
+        self.max_activity_items = 10  # Keep last 10 items
         
         # Recent text messages tracking
         self.recent_messages = []  # List of recent text messages
@@ -903,7 +903,7 @@ class MeshtasticTerminal:
         
         # Show recent activity
         if self.recent_activity:
-            left_content.append(f"\n📊 RECENT ACTIVITY (Last 20):")
+            left_content.append(f"\n📊 RECENT ACTIVITY (Last 10):")
             left_content.append("-" * 75)
             # Show all items (continuous scroll)
             for activity in self.recent_activity:
@@ -1406,10 +1406,10 @@ def main():
         try:
             import select
             last_display = 0
-            display_interval = 10  # Update every 10 seconds
+            display_interval = 1  # Update every 1 second
             
             while True:
-                # Update display every 10 seconds
+                # Update display every 1 second
                 if time.time() - last_display >= display_interval:
                     terminal.display_auto_send_status()
                     last_display = time.time()
