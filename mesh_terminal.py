@@ -42,7 +42,7 @@ class MeshtasticTerminal:
         
         # Recent activity tracking
         self.recent_activity = []  # List of recent packet activity
-        self.max_activity_items = 10  # Keep last 10 items
+        self.max_activity_items = 20  # Keep last 20 items
         
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
@@ -657,10 +657,10 @@ class MeshtasticTerminal:
         
         # Show recent activity
         if self.recent_activity:
-            print(f"\n📊 RECENT ACTIVITY:")
+            print(f"\n📊 RECENT ACTIVITY (Last 20):")
             print("-" * 60)
-            # Show most recent first (last 5)
-            for activity in self.recent_activity[-5:]:
+            # Show all items (continuous scroll)
+            for activity in self.recent_activity:
                 print(f"   {activity}")
         
         # Show countdown
