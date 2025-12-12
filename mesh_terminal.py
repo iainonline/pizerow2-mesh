@@ -576,19 +576,25 @@ class MeshtasticTerminal:
         
         # Show all connected nodes with signal strength
         if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
-            node_count = len(self.interface.nodes)
-            print(f"\n📡 MESH NETWORK ({node_count} nodes):")
-            print("-" * 60)
+            # Filter nodes heard in last 30 minutes
+            recent_cutoff = time.time() - 1800  # 30 minutes
+            recent_nodes = []
             
-            # Sort nodes by last heard (most recent first)
-            nodes_list = []
             for node_id, node in self.interface.nodes.items():
                 last_heard = node.get('lastHeard', 0)
-                nodes_list.append((last_heard, node_id, node))
-            nodes_list.sort(reverse=True)
+                if last_heard > recent_cutoff:
+                    recent_nodes.append((last_heard, node_id, node))
             
-            # Show up to 10 most recently heard nodes
-            for last_heard, node_id, node in nodes_list[:10]:
+            # Sort by last heard (most recent first)
+            recent_nodes.sort(reverse=True)
+            
+            print(f"\n📡 MESH NETWORK - ACTIVE NODES (Last 30min): {len(recent_nodes)}")
+            print("=" * 60)
+            print(f"{'Node':6s} {'Age':>6s}  {'SNR':>10s}  {'RSSI':>10s}")
+            print("-" * 60)
+            
+            # Show top 5 most recently seen nodes
+            for last_heard, node_id, node in recent_nodes[:5]:
                 user = node.get('user', {})
                 short_name = user.get('shortName', node_id[-4:])
                 
@@ -600,23 +606,20 @@ class MeshtasticTerminal:
                     rssi = self.nodes_data[node_id].get('last_rssi')
                 
                 # Calculate time since last heard
-                age_str = "Unknown"
-                if last_heard:
-                    age = time.time() - last_heard
-                    if age < 60:
-                        age_str = f"{int(age)}s"
-                    elif age < 3600:
-                        age_str = f"{int(age/60)}m"
-                    else:
-                        age_str = f"{int(age/3600)}h"
+                age = time.time() - last_heard
+                if age < 60:
+                    age_str = f"{int(age)}s"
+                elif age < 3600:
+                    age_str = f"{int(age/60)}m"
+                else:
+                    age_str = f"{int(age/3600)}h"
                 
-                # Build display line
-                line = f"  {short_name:6s} {age_str:>5s}"
-                if snr is not None:
-                    line += f"  SNR:{snr:>5.1f}dB"
-                if rssi is not None:
-                    line += f"  RSSI:{rssi:>4d}dBm"
-                print(line)
+                # Build display line with proper spacing
+                snr_str = f"{snr:.1f}dB" if snr is not None else "-"
+                rssi_str = f"{rssi}dBm" if rssi is not None else "-"
+                print(f"{short_name:6s} {age_str:>6s}  {snr_str:>10s}  {rssi_str:>10s}")
+            
+            print("=" * 60)
         
         # Get current device telemetry from interface.nodes
         current_telemetry = self.get_current_device_telemetry()
