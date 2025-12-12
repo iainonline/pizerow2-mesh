@@ -414,6 +414,15 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 - Review Meshtastic firmware compatibility
 - Verify Python version compatibility
 
+## Known Issues & TODO
+
+### Pi Zero 2 W USB Compatibility
+⚠️ **USB Serial Issues**: The Pi Zero 2 W's USB implementation has compatibility issues with Meshtastic protobuf streams, causing intermittent parsing errors. 
+
+**Workaround**: Use Raspberry Pi 5/4/3 for USB serial connections (tested and working).
+
+**Future Enhancement**: Implement Bluetooth Low Energy (BLE) connection support as an alternative to USB for Pi Zero 2 W compatibility.
+
 ## Acknowledgments
 
 - **Meshtastic Project** - Excellent mesh networking platform and Python API

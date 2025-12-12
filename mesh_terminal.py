@@ -430,17 +430,9 @@ class MeshtasticTerminal:
             
     def auto_send_worker(self):
         """Background worker for auto-send"""
-        last_display = 0
-        display_interval = 10  # Update display every 10 seconds
-        
         while True:
             if self.auto_send_enabled and self.connected:
                 elapsed = time.time() - self.last_send_time
-                
-                # Display status every 10 seconds
-                if time.time() - last_display >= display_interval:
-                    self.display_auto_send_status()
-                    last_display = time.time()
                 
                 if elapsed >= self.auto_send_interval:
                     self.send_telemetry()
@@ -993,26 +985,42 @@ def main():
     
     # If auto-started and auto-send is enabled, run with M key to enter menu
     if auto_started and terminal.auto_send_enabled:
-        print("\n✅ Running in auto-send mode...")
-        print("Press (M) then Enter to enter menu, or Ctrl+C to exit")
         terminal.logger.info("Running in auto-send background mode")
         
+        # Start auto-send worker thread
+        worker_thread = threading.Thread(target=terminal.auto_send_worker, daemon=True)
+        worker_thread.start()
+        terminal.logger.info("Auto-send worker thread started")
+        
         # Send immediately on startup
+        terminal.clear_screen()
+        terminal.print_header()
         print("\n📤 Sending initial telemetry...")
         terminal.send_telemetry()
         time.sleep(2)
         
+        # Display loop with status updates
         try:
+            import select
+            last_display = 0
+            display_interval = 10  # Update every 10 seconds
+            
             while True:
-                # Check for 'M' key press with timeout
-                import select
-                if select.select([sys.stdin], [], [], 1)[0]:
+                # Update display every 10 seconds
+                if time.time() - last_display >= display_interval:
+                    terminal.display_auto_send_status()
+                    last_display = time.time()
+                
+                # Check for 'M' key press with short timeout
+                if select.select([sys.stdin], [], [], 0.5)[0]:
                     key = sys.stdin.readline().strip().upper()
                     if key == 'M':
                         terminal.logger.info("User pressed M to enter menu")
                         print("\nEntering menu...")
                         time.sleep(1)
                         break
+                
+                time.sleep(0.5)
         except KeyboardInterrupt:
             # Ctrl+C will be handled by signal handler
             pass
