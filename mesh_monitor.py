@@ -776,6 +776,11 @@ class MeshtasticMonitor:
                         lines.append(f"🔗 Hops: {hops_away}")
                     break
         
+        # Debug output
+        print(f"DEBUG: telemetry_history length: {len(self.telemetry_history)}")
+        if self.telemetry_history:
+            print(f"DEBUG: Latest entry: {self.telemetry_history[-1]}")
+        
         # Check if we have telemetry data
         if self.telemetry_history and len(self.telemetry_history) > 0:
             latest = self.telemetry_history[-1]

@@ -9,6 +9,7 @@ import sys
 import time
 import json
 import threading
+import logging
 from datetime import datetime
 from typing import Optional, Dict, List
 import meshtastic
@@ -17,6 +18,10 @@ from pubsub import pub
 
 class MeshtasticTerminal:
     def __init__(self):
+        # Setup logging
+        self.log_file = 'mesh_terminal.log'
+        self.setup_logging()
+        
         self.interface = None
         self.connected = False
         self.telemetry_history = []
@@ -24,7 +29,8 @@ class MeshtasticTerminal:
         self.stats = {
             'packets_rx': 0,
             'packets_tx': 0,
-            'messages_seen': 0
+            'messages_seen': 0,
+            'nodes_discovered': 0
         }
         self.latest_snr = None
         self.latest_rssi = None
@@ -39,6 +45,26 @@ class MeshtasticTerminal:
         # Load config
         self.load_config()
         
+    def setup_logging(self):
+        """Setup file and console logging"""
+        # Create logger
+        self.logger = logging.getLogger('MeshtasticTerminal')
+        self.logger.setLevel(logging.DEBUG)
+        
+        # File handler - detailed logging
+        fh = logging.FileHandler(self.log_file)
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        ))
+        
+        # Add handler
+        self.logger.addHandler(fh)
+        self.logger.info("="*60)
+        self.logger.info("Meshtastic Terminal Monitor Started")
+        self.logger.info("="*60)
+        
     def load_config(self):
         """Load configuration from JSON file"""
         try:
@@ -48,9 +74,15 @@ class MeshtasticTerminal:
                     self.auto_send_enabled = config.get('auto_send_enabled', False)
                     self.auto_send_interval = config.get('auto_send_interval', 60)
                     self.selected_nodes = config.get('selected_nodes', [])
-                    print(f"✅ Loaded config: {len(self.selected_nodes)} nodes selected")
+                    msg = f"Loaded config: {len(self.selected_nodes)} nodes selected, auto_send={self.auto_send_enabled}"
+                    print(f"✅ {msg}")
+                    self.logger.info(msg)
+            else:
+                self.logger.info("No config file found, using defaults")
         except Exception as e:
-            print(f"⚠️  Error loading config: {e}")
+            msg = f"Error loading config: {e}"
+            print(f"⚠️  {msg}")
+            self.logger.error(msg)
             
     def save_config(self):
         """Save configuration to JSON file"""
@@ -62,8 +94,11 @@ class MeshtasticTerminal:
             }
             with open(self.config_file, 'w') as f:
                 json.dump(config, f, indent=2)
+            self.logger.info(f"Saved config: {len(self.selected_nodes)} nodes, interval={self.auto_send_interval}s")
         except Exception as e:
-            print(f"⚠️  Error saving config: {e}")
+            msg = f"Error saving config: {e}"
+            print(f"⚠️  {msg}")
+            self.logger.error(msg)
             
     def connect_device(self):
         """Connect to Meshtastic device with retry"""
@@ -117,7 +152,29 @@ class MeshtasticTerminal:
             
     def on_connection(self, interface, topic=pub.AUTO_TOPIC):
         """Called when connection is established"""
-        print("✅ Connection established")
+        self.logger.info("Connection established via pubsub")
+        
+    def on_node_updated(self, node, interface):
+        """Called when a node is discovered or updated"""
+        try:
+            node_num = node.get('num')
+            if node_num:
+                node_id = f"!{node_num:08x}"
+                user = node.get('user', {})
+                long_name = user.get('longName', 'Unknown')
+                
+                # Check if this is a new node
+                if node_id not in self.nodes_data:
+                    self.stats['nodes_discovered'] += 1
+                    self.logger.info(f"NEW NODE discovered: {long_name} ({node_id})")
+                
+                self.nodes_data[node_id] = {
+                    'name': long_name,
+                    'id': node_id,
+                    'last_update': datetime.now().strftime('%H:%M:%S')
+                }
+        except Exception as e:
+            self.logger.error(f"Error in on_node_updated: {e}")
         
     def on_receive(self, packet, interface):
         """Called when a packet is received"""
@@ -137,14 +194,19 @@ class MeshtasticTerminal:
             if isinstance(rssi, (int, float)):
                 self.latest_rssi = rssi
             
+            # Log packet details
+            self.logger.debug(f"RX: {portnum} from {from_id} | SNR: {snr} | RSSI: {rssi}")
+            
             # Process telemetry
             if portnum == 'TELEMETRY_APP':
                 self.process_telemetry(packet)
             elif portnum == 'TEXT_MESSAGE_APP':
                 self.stats['messages_seen'] += 1
+                text = decoded.get('text', '')
+                self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
                 
         except Exception as e:
-            pass
+            self.logger.error(f"Error in on_receive: {e}")
             
     def process_telemetry(self, packet):
         """Process telemetry data"""
@@ -253,11 +315,15 @@ class MeshtasticTerminal:
     def send_telemetry(self):
         """Send telemetry to selected nodes"""
         if not self.connected or not self.interface:
-            print("❌ Not connected to device")
+            msg = "Not connected to device"
+            print(f"❌ {msg}")
+            self.logger.warning(f"Send failed: {msg}")
             return False
             
         if not self.selected_nodes:
-            print("❌ No nodes selected")
+            msg = "No nodes selected"
+            print(f"❌ {msg}")
+            self.logger.warning(f"Send failed: {msg}")
             return False
         
         try:
@@ -265,12 +331,17 @@ class MeshtasticTerminal:
                 message = self.get_telemetry_message(dest_node_id=node_id)
                 self.interface.sendText(message, destinationId=node_id, wantAck=True)
                 self.stats['packets_tx'] += 1
+                self.logger.info(f"Sent telemetry to {node_id}: {message}")
             
             self.last_send_time = time.time()
-            print(f"✅ Sent telemetry to {len(self.selected_nodes)} nodes")
+            msg = f"Sent telemetry to {len(self.selected_nodes)} nodes"
+            print(f"✅ {msg}")
+            self.logger.info(msg)
             return True
         except Exception as e:
-            print(f"❌ Error sending telemetry: {e}")
+            msg = f"Error sending telemetry: {e}"
+            print(f"❌ {msg}")
+            self.logger.error(msg)
             return False
             
     def auto_send_worker(self):
@@ -295,7 +366,8 @@ class MeshtasticTerminal:
             print("Status: ✅ Connected")
         else:
             print("Status: ❌ Disconnected")
-        print(f"Packets RX: {self.stats['packets_rx']} | TX: {self.stats['packets_tx']}")
+        print(f"Packets RX: {self.stats['packets_rx']} | TX: {self.stats['packets_tx']} | Nodes: {self.stats['nodes_discovered']}")
+        print(f"Log file: {self.log_file}")
         print("=" * 60)
         print()
         
@@ -349,57 +421,66 @@ class MeshtasticTerminal:
         
         print()
         try:
-            input("Press Enter to continue...")
+            raw_input = input("Press Enter to continue...")
         except (KeyboardInterrupt, EOFError):
             pass
+        except Exception as e:
+            print(f"Input error: {e}")
+            time.sleep(1)
         
     def show_nodes(self):
         """Display mesh nodes"""
-        self.clear_screen()
-        self.print_header()
-        
-        print("👥 MESH NODES")
-        print("-" * 60)
-        
         try:
-            if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
-                # Create a snapshot to avoid race conditions
-                nodes_snapshot = list(self.interface.nodes.values())
-                
-                for node in nodes_snapshot:
-                    try:
-                        user = node.get('user', {})
-                        long_name = user.get('longName', 'Unknown')
-                        node_num = node.get('num')
-                        node_id = f"!{node_num:08x}" if node_num else 'N/A'
-                        snr = node.get('snr', 'N/A')
-                        hops = node.get('hopsAway', 0)
-                        
-                        snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
-                        
-                        last_heard = node.get('lastHeard')
-                        if last_heard:
-                            last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
-                        else:
-                            last_heard_str = 'Never'
-                        
-                        selected = "✓" if node_id in self.selected_nodes else " "
-                        print(f"[{selected}] {long_name} ({node_id})")
-                        print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
-                        print()
-                    except Exception as e:
-                        print(f"Error displaying node: {e}")
-                        continue
-            else:
-                print("No nodes available yet...")
+            self.clear_screen()
+            self.print_header()
+            
+            print("👥 MESH NODES")
+            print("-" * 60)
+            
+            try:
+                if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
+                    # Create a snapshot to avoid race conditions
+                    nodes_snapshot = list(self.interface.nodes.values())
+                    
+                    for node in nodes_snapshot:
+                        try:
+                            user = node.get('user', {})
+                            long_name = user.get('longName', 'Unknown')
+                            node_num = node.get('num')
+                            node_id = f"!{node_num:08x}" if node_num else 'N/A'
+                            snr = node.get('snr', 'N/A')
+                            hops = node.get('hopsAway', 0)
+                            
+                            snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
+                            
+                            last_heard = node.get('lastHeard')
+                            if last_heard:
+                                last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
+                            else:
+                                last_heard_str = 'Never'
+                            
+                            selected = "✓" if node_id in self.selected_nodes else " "
+                            print(f"[{selected}] {long_name} ({node_id})")
+                            print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
+                            print()
+                        except Exception as e:
+                            continue
+                else:
+                    print("No nodes available yet...")
+            except Exception as e:
+                print(f"Error accessing nodes: {e}")
+            
+            print()
+            try:
+                raw_input = input("Press Enter to continue...")
+            except (KeyboardInterrupt, EOFError):
+                pass
+            except Exception as e:
+                print(f"Input error: {e}")
+                time.sleep(1)
         except Exception as e:
-            print(f"Error accessing nodes: {e}")
-        
-        print()
-        try:
-            input("Press Enter to continue...")
-        except (KeyboardInterrupt, EOFError):
-            pass
+            print(f"Critical error in show_nodes: {e}")
+            time.sleep(2)
         
     def select_nodes(self):
         """Select nodes for auto-send"""
