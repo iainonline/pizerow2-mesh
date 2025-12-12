@@ -137,9 +137,17 @@ class MeshtasticTerminal:
     
     def get_line_input(self, prompt=""):
         """Get a full line of input (for text messages, numbers, etc)"""
-        if prompt:
-            print(prompt, end='', flush=True)
-        return input()
+        # Ensure terminal is in canonical mode
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            if prompt:
+                print(prompt, end='', flush=True)
+            return input()
+        except:
+            # Restore settings on error
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            raise
         
     def load_config(self):
         """Load configuration from JSON file"""
@@ -761,18 +769,13 @@ class MeshtasticTerminal:
             print("  [N]      - Send message to new node")
             print("  [B]      - Back to dashboard")
             
-            choice = self.get_single_key("\nSelect option: ").strip().upper()
+            choice = self.get_line_input("\nSelect option: ").strip().upper()
             
             if choice == 'B':
                 return
             elif choice == 'N':
                 self.send_new_message(node_list)
             elif choice.isdigit():
-                # If they pressed a digit, get the rest of the number
-                print(choice, end='', flush=True)  # Show the first digit
-                rest = self.get_line_input("").strip()  # Get remaining digits
-                choice = choice + rest  # Combine them
-                
                 idx = int(choice) - 1
                 if 0 <= idx < len(node_list):
                     self.view_conversation(node_list[idx])
@@ -881,17 +884,12 @@ class MeshtasticTerminal:
             node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
             print(f"  {idx}. {node_name}")
         
-        choice = self.get_single_key("\nSelect node number (or B to go back): ").strip()
+        choice = self.get_line_input("\nSelect node number (or B to go back): ").strip()
         
         if choice.upper() == 'B':
             return
         
         if choice.isdigit():
-            # If they pressed a digit, get the rest of the number
-            print(choice, end='', flush=True)  # Show the first digit
-            rest = self.get_line_input("").strip()  # Get remaining digits
-            choice = choice + rest  # Combine them
-            
             idx = int(choice) - 1
             if 0 <= idx < len(node_list):
                 node_id = node_list[idx]
@@ -1387,7 +1385,7 @@ class MeshtasticTerminal:
                     print()
                     
                     try:
-                        choice = self.get_single_key("Enter number to toggle, or letter: ").strip().upper()
+                        choice = self.get_line_input("Enter number to toggle, or letter: ").strip().upper()
                     except (KeyboardInterrupt, EOFError):
                         self.logger.info("User cancelled node selection")
                         return
@@ -1410,12 +1408,7 @@ class MeshtasticTerminal:
                         self.selected_nodes = []
                         self.logger.info("Cleared all selected nodes")
                     elif choice.isdigit():
-                        # If they pressed a digit, get the rest of the number
-                        print(choice, end='', flush=True)  # Show the first digit
-                        rest = self.get_line_input("").strip()  # Get remaining digits
-                        full_choice = choice + rest  # Combine them
-                        
-                        idx = int(full_choice) - 1
+                        idx = int(choice) - 1
                         if 0 <= idx < len(nodes_list):
                             node_id = nodes_list[idx]
                             if node_id in self.selected_nodes:
