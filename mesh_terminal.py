@@ -403,16 +403,20 @@ class MeshtasticTerminal:
     def process_keyword_command(self, text, from_id):
         """Process keyword commands from target nodes"""
         try:
+            reply_message = None
+            
             if text == 'STOP':
                 self.auto_send_paused = True
                 self.logger.info(f"AUTO-SEND STOPPED by command from {from_id}")
                 print(f"\n🛑 AUTO-SEND STOPPED by {from_id}")
                 self.add_activity(f"🛑 AUTO-SEND STOPPED by {from_id}")
+                reply_message = "✅ AUTO-SEND STOPPED"
             elif text == 'START':
                 self.auto_send_paused = False
                 self.logger.info(f"AUTO-SEND STARTED by command from {from_id}")
                 print(f"\n▶️  AUTO-SEND STARTED by {from_id}")
                 self.add_activity(f"▶️  AUTO-SEND STARTED by {from_id}")
+                reply_message = "✅ AUTO-SEND STARTED"
             elif text.startswith('FREQ') and len(text) > 4:
                 # Parse frequency (e.g., FREQ60, FREQ300)
                 try:
@@ -424,10 +428,52 @@ class MeshtasticTerminal:
                         self.logger.info(f"FREQUENCY changed from {old_freq}s to {new_freq}s by {from_id}")
                         print(f"\n⏱️  FREQUENCY changed to {new_freq}s by {from_id}")
                         self.add_activity(f"⏱️  FREQ changed to {new_freq}s by {from_id}")
+                        reply_message = f"✅ FREQ set to {new_freq}s (was {old_freq}s)"
                     else:
                         self.logger.warning(f"Invalid frequency {new_freq} from {from_id} (must be 30-3600)")
+                        reply_message = f"❌ FREQ must be 30-3600 seconds"
                 except ValueError:
                     self.logger.warning(f"Invalid FREQ command from {from_id}: {text}")
+                    reply_message = "❌ Invalid FREQ format. Use FREQ## (e.g., FREQ60)"
+            elif text == 'RADIOCHECK':
+                # Respond with signal strength data
+                self.logger.info(f"RADIOCHECK requested by {from_id}")
+                print(f"\n📡 RADIOCHECK requested by {from_id}")
+                self.add_activity(f"📡 RADIOCHECK from {from_id}")
+                
+                # Get signal data for requesting node
+                node_info = self.get_node_info(from_id)
+                if node_info and from_id in self.nodes_data:
+                    snr = self.nodes_data[from_id].get('last_snr', 0)
+                    rssi = self.nodes_data[from_id].get('last_rssi', 0)
+                    last_heard = node_info.get('lastHeard', 0)
+                    age = int(time.time() - last_heard) if last_heard else 0
+                    
+                    reply_message = f"📡 RADIOCHECK: SNR {snr:.1f}dB | RSSI {rssi}dBm | Age {age}s"
+                else:
+                    reply_message = "📡 RADIOCHECK: No recent signal data available"
+            
+            # Send auto-reply if a response was generated
+            if reply_message and self.interface:
+                try:
+                    self.interface.sendText(reply_message, destinationId=from_id, wantAck=False)
+                    self.logger.info(f"Auto-reply sent to {from_id}: {reply_message}")
+                    print(f"  ↪️  Replied: {reply_message}")
+                    self.add_activity(f"📤 Auto-reply to {from_id}")
+                    
+                    # Add to conversation
+                    if from_id not in self.conversations:
+                        self.conversations[from_id] = []
+                    self.conversations[from_id].append({
+                        'time': datetime.now().strftime('%H:%M:%S'),
+                        'from': 'local',
+                        'to': from_id,
+                        'text': reply_message,
+                        'direction': 'sent'
+                    })
+                except Exception as e:
+                    self.logger.error(f"Error sending auto-reply to {from_id}: {e}")
+                    
         except Exception as e:
             self.logger.error(f"Error processing keyword command: {e}")
     
@@ -704,7 +750,7 @@ class MeshtasticTerminal:
             return False
         
         try:
-            keyword_msg = f"Commands: STOP START FREQ## (30-3600) | Current: {self.auto_send_interval}s"
+            keyword_msg = f"Commands: STOP START FREQ## RADIOCHECK | Interval: {self.auto_send_interval}s"
             
             for node_id in self.selected_nodes:
                 self.interface.sendText(keyword_msg, destinationId=node_id, wantAck=False)
