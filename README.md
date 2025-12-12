@@ -1,4 +1,4 @@
-# Meshtastic Terminal Monitor v1.4
+# Meshtastic Terminal Monitor v1.6
 
 A lightweight terminal-based monitoring application with AI ChatBot for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi 5/4/3. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and interact with an intelligent AI assistant over the mesh.
 
@@ -578,7 +578,34 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v1.3 (Current - Enhanced Messaging)
+### v1.6 (Current - Terminal Launcher & Service)
+- **Terminal Auto-Launch** - Maximized window automatically on startup
+- **Systemd Service** - System integration for auto-start at boot
+- **Dedicated Launcher** - `launch_maximized.sh` starts terminal in full screen
+- **Improved Startup** - Auto-start script launches in new maximized terminal
+- **Better Service Management** - Easy enable/disable/restart with systemctl
+- **Clean Output** - Terminal optimized for visibility and monitoring
+
+**New Files**:
+- `launch_maximized.sh` - Maximized terminal launcher for better visibility
+- Updated `meshtastic.service` - System service with maximized terminal integration
+- Updated `start_terminal.sh` - Integrated with maximized terminal launcher
+
+### v1.5 (Enhanced Reliability)
+- **Improved ChatBot Error Handling** - Better recovery from processing failures
+- **Enhanced Message Processing** - More robust keyword command detection
+- **Better Rate Limiting** - Clearer feedback when limits reached
+- **Optimized Dashboard Updates** - Smoother real-time display refresh
+- **Message History Fixes** - Proper tracking of sent messages
+
+### v1.4 (AI ChatBot Integration)
+- **TinyLlama AI ChatBot** - On-device AI responses over mesh
+- **Smart Rate Limiting** - 50 msg/hour for non-selected nodes
+- **Auto Message Splitting** - 200-char chunk management
+- **Thinking Indicator** - Visual feedback during AI processing
+- **CHATBOTON/OFF Commands** - Remote ChatBot control
+
+### v1.3 (Enhanced Messaging)
 - **Interactive Message Interface** - View conversations with any node
 - **Sent Message Tracking** - Dashboard displays last 10 sent messages
 - **Enhanced Keyword Commands** - Added WEATHERCHECK and KEYWORDS commands

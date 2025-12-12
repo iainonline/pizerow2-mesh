@@ -1,14 +1,13 @@
 [Unit]
-Description=Meshtastic ChatBot
-After=network.target bluetooth.target
-Wants=network.target bluetooth.target
+Description=Meshtastic Terminal Monitor with ChatBot
+After=network.target
 
 [Service]
 Type=simple
 User=iain
 WorkingDirectory=/home/iain/Meshtastic
-ExecStart=/home/iain/Meshtastic/start_chatbot.sh
-Restart=on-failure
+ExecStart=/home/iain/Meshtastic/start_terminal.sh
+Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal

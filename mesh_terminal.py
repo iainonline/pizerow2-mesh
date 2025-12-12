@@ -2343,42 +2343,59 @@ def main():
             last_display = 0
             display_interval = 1  # Update every 1 second
             
-            # Set terminal to cbreak mode for single character input
-            old_settings = termios.tcgetattr(sys.stdin)
-            try:
-                tty.setcbreak(sys.stdin.fileno())
-                
+            # Check if stdin is a TTY (interactive terminal)
+            is_tty = sys.stdin.isatty()
+            
+            if is_tty:
+                # Set terminal to cbreak mode for single character input
+                old_settings = termios.tcgetattr(sys.stdin)
+                try:
+                    tty.setcbreak(sys.stdin.fileno())
+                    
+                    while True:
+                        # Update display every 1 second
+                        if time.time() - last_display >= display_interval:
+                            terminal.display_auto_send_status()
+                            last_display = time.time()
+                        
+                        # Check for key press with short timeout
+                        if select.select([sys.stdin], [], [], 0.5)[0]:
+                            key = sys.stdin.read(1).upper()
+                            
+                            if key == 'M':
+                                terminal.logger.info("User pressed M to enter menu")
+                                print("\nEntering menu...")
+                                time.sleep(1)
+                                break
+                            elif key == 'S':
+                                terminal.logger.info("User pressed S to send message")
+                                terminal.message_interface()
+                                terminal.clear_screen()
+                                terminal.print_header()
+                        
+                        time.sleep(0.5)
+                finally:
+                    # Restore terminal settings
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            else:
+                # Running as service without TTY - just keep running
+                terminal.logger.info("Running in non-interactive mode (no TTY)")
+                print("Running in non-interactive mode. Press Ctrl+C to stop.")
                 while True:
-                    # Update display every 1 second
                     if time.time() - last_display >= display_interval:
                         terminal.display_auto_send_status()
                         last_display = time.time()
-                    
-                    # Check for key press with short timeout
-                    if select.select([sys.stdin], [], [], 0.5)[0]:
-                        key = sys.stdin.read(1).upper()
-                        
-                        if key == 'M':
-                            terminal.logger.info("User pressed M to enter menu")
-                            print("\nEntering menu...")
-                            time.sleep(1)
-                            break
-                        elif key == 'S':
-                            terminal.logger.info("User pressed S to send message")
-                            terminal.message_interface()
-                            terminal.clear_screen()
-                            terminal.print_header()
-                    
                     time.sleep(0.5)
-            finally:
-                # Restore terminal settings
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         except KeyboardInterrupt:
             # Ctrl+C will be handled by signal handler
             pass
     
-    # Show main menu
-    terminal.main_menu()
+    # Show main menu (only in interactive mode)
+    if sys.stdin.isatty():
+        terminal.main_menu()
+    else:
+        terminal.logger.info("Service stopped")
+        print("Service stopped.")
 
 if __name__ == "__main__":
     main()
