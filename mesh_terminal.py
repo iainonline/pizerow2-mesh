@@ -120,6 +120,26 @@ class MeshtasticTerminal:
         self.activity_logger.info("="*60)
         self.activity_logger.info("Activity Log Started")
         self.activity_logger.info("="*60)
+    
+    def get_single_key(self, prompt=""):
+        """Get a single keypress without requiring Enter"""
+        if prompt:
+            print(prompt, end='', flush=True)
+        
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            key = sys.stdin.read(1)
+            print()  # New line after key press
+            return key
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    
+    def get_line_input(self, prompt=""):
+        """Get a full line of input (for text messages, numbers, etc)"""
+        if prompt:
+            print(prompt, end='', flush=True)
+        return input()
         
     def load_config(self):
         """Load configuration from JSON file"""
@@ -714,8 +734,7 @@ class MeshtasticTerminal:
             
             if not node_list:
                 print("\n❌ No nodes available")
-                print("\nPress Enter to return...")
-                input()
+                self.get_single_key("\nPress any key to return...")
                 return
             
             # Display nodes with message counts
@@ -742,7 +761,7 @@ class MeshtasticTerminal:
             print("  [N]      - Send message to new node")
             print("  [B]      - Back to dashboard")
             
-            choice = input("\nSelect option: ").strip().upper()
+            choice = self.get_single_key("\nSelect option: ").strip().upper()
             
             if choice == 'B':
                 return
@@ -857,7 +876,7 @@ class MeshtasticTerminal:
             node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
             print(f"  {idx}. {node_name}")
         
-        choice = input("\nSelect node number (or B to go back): ").strip()
+        choice = self.get_single_key("\nSelect node number (or B to go back): ").strip()
         
         if choice.upper() == 'B':
             return
@@ -873,7 +892,7 @@ class MeshtasticTerminal:
     def send_message_to_node(self, node_id, node_name):
         """Send a text message to a specific node"""
         print(f"\n📝 Message to {node_name} (max 200 chars, or 'cancel' to abort):")
-        message = input("> ").strip()
+        message = self.get_line_input("> ").strip()
         
         if message.lower() == 'cancel' or not message:
             print("❌ Message cancelled")
@@ -1240,7 +1259,7 @@ class MeshtasticTerminal:
         
         print()
         try:
-            raw_input = input("Press Enter to continue...")
+            self.get_single_key("Press any key to continue...")
         except (KeyboardInterrupt, EOFError):
             pass
         except Exception as e:
@@ -1291,7 +1310,7 @@ class MeshtasticTerminal:
             
             print()
             try:
-                raw_input = input("Press Enter to continue...")
+                self.get_single_key("Press any key to continue...")
             except (KeyboardInterrupt, EOFError):
                 pass
             except Exception as e:
@@ -1317,7 +1336,7 @@ class MeshtasticTerminal:
                         print("No nodes available yet...")
                         self.logger.warning("No nodes available in select_nodes")
                         try:
-                            input("\nPress Enter to continue...")
+                            self.get_single_key("\nPress any key to continue...")
                         except (KeyboardInterrupt, EOFError):
                             pass
                         return
@@ -1358,7 +1377,7 @@ class MeshtasticTerminal:
                     print()
                     
                     try:
-                        choice = input("Enter number to toggle, or letter: ").strip().upper()
+                        choice = self.get_single_key("Enter number to toggle, or letter: ").strip().upper()
                     except (KeyboardInterrupt, EOFError):
                         self.logger.info("User cancelled node selection")
                         return
@@ -1443,7 +1462,7 @@ class MeshtasticTerminal:
                 print("5. Return to Main Menu")
                 print()
                 
-                choice = input("Enter choice: ").strip()
+                choice = self.get_single_key("Enter choice: ").strip()
                 self.logger.info(f"Auto-send menu choice: {choice}")
                 
                 if choice == '1':
@@ -1455,7 +1474,7 @@ class MeshtasticTerminal:
                     time.sleep(1)
                 elif choice == '2':
                     try:
-                        interval = int(input("Enter interval in seconds (min 30): "))
+                        interval = int(self.get_line_input("Enter interval in seconds (min 30): "))
                         if interval >= 30:
                             self.auto_send_interval = interval
                             self.save_config()
@@ -1522,7 +1541,7 @@ class MeshtasticTerminal:
         print()
         print("💡 TIP: Try sending a test message and check the log for details")
         print()
-        input("Press Enter to continue...")
+        self.get_single_key("Press any key to continue...")
         
     def main_menu(self):
         """Display main menu"""
@@ -1543,7 +1562,7 @@ class MeshtasticTerminal:
             print("5. Exit")
             print()
             
-            choice = input("Enter choice: ").strip()
+            choice = self.get_single_key("Enter choice: ").strip()
             
             if choice == '1':
                 self.show_telemetry()
