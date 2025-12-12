@@ -833,16 +833,25 @@ def main():
         reconnect_thread = threading.Thread(target=reconnect_worker, daemon=True)
         reconnect_thread.start()
     
-    # If auto-started and auto-send is enabled, just run in background
+    # If auto-started and auto-send is enabled, run with M key to enter menu
     if auto_started and terminal.auto_send_enabled:
         print("\n✅ Running in auto-send mode...")
-        print("Press Ctrl+C to enter menu")
+        print("Press (M) then Enter to enter menu, or Ctrl+C to exit")
+        terminal.logger.info("Running in auto-send background mode")
         try:
             while True:
-                time.sleep(1)
+                # Check for 'M' key press with timeout
+                import select
+                if select.select([sys.stdin], [], [], 1)[0]:
+                    key = sys.stdin.readline().strip().upper()
+                    if key == 'M':
+                        terminal.logger.info("User pressed M to enter menu")
+                        print("\nEntering menu...")
+                        time.sleep(1)
+                        break
         except KeyboardInterrupt:
-            print("\n\nEntering menu...")
-            time.sleep(1)
+            # Ctrl+C will be handled by signal handler
+            pass
     
     # Show main menu
     terminal.main_menu()
