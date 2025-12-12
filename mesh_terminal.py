@@ -51,6 +51,9 @@ class MeshtasticTerminal:
         # Message acknowledgment tracking per target node
         self.message_acks = {}  # {node_id: {'last_ack_time': timestamp, 'ack_status': 'ACK'/'NAK'/'PENDING'}}
         
+        # Keyword command control
+        self.auto_send_paused = False  # STOP/START command control
+        
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
         self.auto_send_enabled = False
@@ -321,6 +324,10 @@ class MeshtasticTerminal:
                 text = decoded.get('text', '')
                 self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
                 
+                # Check for keyword commands (only from target nodes)
+                if from_id in self.selected_nodes:
+                    self.process_keyword_command(text.strip().upper(), from_id)
+                
                 # Store the message
                 node_name = from_id
                 node_info = self.get_node_info(from_id)
@@ -346,6 +353,37 @@ class MeshtasticTerminal:
                 
         except Exception as e:
             self.logger.error(f"Error in on_receive: {e}")
+    
+    def process_keyword_command(self, text, from_id):
+        """Process keyword commands from target nodes"""
+        try:
+            if text == 'STOP':
+                self.auto_send_paused = True
+                self.logger.info(f"AUTO-SEND STOPPED by command from {from_id}")
+                print(f"\n🛑 AUTO-SEND STOPPED by {from_id}")
+                self.add_activity(f"🛑 AUTO-SEND STOPPED by {from_id}")
+            elif text == 'START':
+                self.auto_send_paused = False
+                self.logger.info(f"AUTO-SEND STARTED by command from {from_id}")
+                print(f"\n▶️  AUTO-SEND STARTED by {from_id}")
+                self.add_activity(f"▶️  AUTO-SEND STARTED by {from_id}")
+            elif text.startswith('FREQ') and len(text) > 4:
+                # Parse frequency (e.g., FREQ60, FREQ300)
+                try:
+                    new_freq = int(text[4:])
+                    if 30 <= new_freq <= 3600:  # Limit between 30 seconds and 1 hour
+                        old_freq = self.auto_send_interval
+                        self.auto_send_interval = new_freq
+                        self.save_config()
+                        self.logger.info(f"FREQUENCY changed from {old_freq}s to {new_freq}s by {from_id}")
+                        print(f"\n⏱️  FREQUENCY changed to {new_freq}s by {from_id}")
+                        self.add_activity(f"⏱️  FREQ changed to {new_freq}s by {from_id}")
+                    else:
+                        self.logger.warning(f"Invalid frequency {new_freq} from {from_id} (must be 30-3600)")
+                except ValueError:
+                    self.logger.warning(f"Invalid FREQ command from {from_id}: {text}")
+        except Exception as e:
+            self.logger.error(f"Error processing keyword command: {e}")
     
     def handle_routing_response(self, packet):
         """Handle routing ACK/NAK responses"""
@@ -612,6 +650,25 @@ class MeshtasticTerminal:
             print(f"❌ {msg}")
             self.logger.error(msg, exc_info=True)
             return False
+    
+    def send_keyword_info(self):
+        """Send keyword command information to target nodes"""
+        if not self.connected or not self.interface or not self.selected_nodes:
+            return False
+        
+        try:
+            keyword_msg = f"Commands: STOP START FREQ## (30-3600) | Current: {self.auto_send_interval}s"
+            
+            for node_id in self.selected_nodes:
+                self.interface.sendText(keyword_msg, destinationId=node_id, wantAck=False)
+                self.logger.info(f"Sent keyword info to {node_id}")
+                time.sleep(0.5)  # Small delay between sends
+            
+            self.add_activity("📋 Sent keyword info to nodes")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error sending keyword info: {e}")
+            return False
             
     def get_node_info(self, node_id: str) -> Optional[Dict]:
         """Get node information by ID"""
@@ -626,7 +683,7 @@ class MeshtasticTerminal:
     def auto_send_worker(self):
         """Background worker for auto-send"""
         while True:
-            if self.auto_send_enabled and self.connected:
+            if self.auto_send_enabled and self.connected and not self.auto_send_paused:
                 elapsed = time.time() - self.last_send_time
                 
                 if elapsed >= self.auto_send_interval:
@@ -638,7 +695,11 @@ class MeshtasticTerminal:
         self.clear_screen()
         self.print_header()
         
-        print("🔄 AUTO-SEND MODE ACTIVE")
+        # Show paused status if applicable
+        if self.auto_send_paused:
+            print("🛑 AUTO-SEND PAUSED (Send START to resume)")
+        else:
+            print("🔄 AUTO-SEND MODE ACTIVE")
         print("=" * 120)
         
         # Build message panel for right side (40 chars wide)
@@ -855,10 +916,13 @@ class MeshtasticTerminal:
             right_line = message_lines[i] if i < len(message_lines) else " " * 40
             print(f"{left_line:<75s}  {right_line}")
         
-        # Show countdown
-        elapsed = time.time() - self.last_send_time
-        remaining = max(0, int(self.auto_send_interval - elapsed))
-        print(f"\n⏱️  Next send in: {remaining} seconds")
+        # Show countdown or paused status
+        if self.auto_send_paused:
+            print(f"\n⏱️  AUTO-SEND PAUSED - Send START command to resume")
+        else:
+            elapsed = time.time() - self.last_send_time
+            remaining = max(0, int(self.auto_send_interval - elapsed))
+            print(f"\n⏱️  Next send in: {remaining} seconds")
         print("\n💡 Press (M) for Menu | Ctrl+C to Exit")
         print("=" * 120)
             
@@ -1331,6 +1395,11 @@ def main():
         terminal.print_header()
         print("\n📤 Sending initial telemetry...")
         terminal.send_telemetry()
+        time.sleep(1)
+        
+        # Send keyword command information
+        print("📋 Sending keyword command info...")
+        terminal.send_keyword_info()
         time.sleep(2)
         
         # Display loop with status updates
