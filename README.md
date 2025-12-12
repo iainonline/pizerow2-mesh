@@ -1,4 +1,4 @@
-# Meshtastic Terminal Monitor v1.7
+# Meshtastic Terminal Monitor v2.0
 
 A lightweight terminal-based monitoring application with AI ChatBot for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi 5/4/3. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and interact with an intelligent AI assistant over the mesh.
 
@@ -9,13 +9,17 @@ A lightweight terminal-based monitoring application with AI ChatBot for Meshtast
 
 ## Features
 
-### 🤖 AI ChatBot (NEW in v1.4!)
+### 🤖 AI ChatBot (Enhanced in v2.0!)
 - **TinyLlama 1.1B**: Fast, efficient on-device AI running on Raspberry Pi 5
-- **Mesh-Native**: Responds to any text message over the mesh network
+- **Direct Messages Only**: Responds only to DMs (not channel broadcasts)
+- **Universal Access**: Responds to all nodes on the mesh
 - **Rate Limiting**: 50 messages/hour for non-selected nodes, unlimited for selected nodes
 - **Auto-Enabled**: ChatBot loads automatically on startup
 - **Smart Splitting**: Long responses split into 200-char messages automatically
-- **Live Status**: Dashboard shows "💭 Thinking..." when generating responses
+- **Flicker-Free Display**: Smooth dashboard updates using cursor positioning
+- **Live Status**: Dashboard shows "💭 Thinking..." in green during AI processing
+- **Concise Responses**: Optimized for 500 char responses (2-3 messages)
+- **Mesh Personality**: MeshBot identifies as a bot running on the mesh network
 - **Customizable Greeting**: Set your own welcome message
 - **Commands**: CHATBOTON/CHATBOTOFF from selected nodes only
 
@@ -267,15 +271,17 @@ Target nodes can send commands to control your station:
 
 ### ChatBot Usage
 
-The AI ChatBot responds to any text message that's not a keyword command:
+The AI ChatBot responds to direct messages (DMs) that are not keyword commands:
 
 **Features**:
+- **DM Only**: Responds only to direct messages, ignores channel broadcasts
 - Responds to **all nodes** on the mesh (not just selected ones)
 - Rate limiting: 50 messages per hour for non-selected nodes
 - Selected nodes have unlimited access
 - Automatic message splitting (200 char Meshtastic limit)
-- Responses limited to 1000 chars total (max 5 messages)
-- Shows "💭 Thinking..." in dashboard during processing
+- Responses limited to 500 chars total (2-3 messages)
+- Shows "💭 Thinking..." in green on dashboard during processing
+- Flicker-free dashboard updates for smooth user experience
 
 **Example Conversation**:
 ```
@@ -578,7 +584,32 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v1.6 (Current - Terminal Launcher & Service)
+### v2.0 (Current - Enhanced ChatBot & Display)
+- **Direct Message Only ChatBot** - Responds only to DMs, not channel broadcasts
+- **Flicker-Free Dashboard** - ANSI cursor positioning eliminates screen flicker
+- **Green Thinking Indicator** - "💭 Thinking..." displayed in green during AI processing
+- **Optimized Responses** - ChatBot now targets 500 char responses for faster mesh delivery
+- **Enhanced Personality** - MeshBot identifies as a mesh-native assistant
+- **Correct Message Order** - Incoming messages stored before ChatBot processes
+- **Universal ChatBot Access** - All nodes can interact with ChatBot (with rate limiting)
+- **Keyword Commands Protected** - Only selected nodes can use keyword commands
+- **Improved Logging** - Shows toId field for better DM tracking
+- **Better Error Handling** - More robust message processing
+
+### v1.7 (Terminal Launcher & Service)
+- **Terminal Auto-Launch** - Maximized window automatically on startup
+- **Systemd Service** - System integration for auto-start at boot
+- **Dedicated Launcher** - `launch_maximized.sh` starts terminal in full screen
+- **Improved Startup** - Auto-start script launches in new maximized terminal
+- **Better Service Management** - Easy enable/disable/restart with systemctl
+- **Clean Output** - Terminal optimized for visibility and monitoring
+
+**New Files**:
+- `launch_maximized.sh` - Maximized terminal launcher for better visibility
+- Updated `meshtastic.service` - System service with maximized terminal integration
+- Updated `start_terminal.sh` - Integrated with maximized terminal launcher
+
+### v1.6 (Terminal Launcher & Service)
 - **Terminal Auto-Launch** - Maximized window automatically on startup
 - **Systemd Service** - System integration for auto-start at boot
 - **Dedicated Launcher** - `launch_maximized.sh` starts terminal in full screen

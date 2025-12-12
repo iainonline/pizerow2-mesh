@@ -398,70 +398,11 @@ class MeshtasticTerminal:
                 self.stats['messages_seen'] += 1
                 text = decoded.get('text', '')
                 channel = packet.get('channel', 0)
+                to_id = packet.get('toId', 'Unknown')
                 
-                self.logger.info(f"TEXT_MSG from {from_id} (ch {channel}): {text[:50]}")
+                self.logger.info(f"TEXT_MSG from {from_id} to {to_id} (ch {channel}): {text[:50]}")
                 
-                # Check if this is a keyword command
-                text_upper = text.strip().upper()
-                keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
-                is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
-                
-                # Only process messages from selected nodes
-                if from_id not in self.selected_nodes:
-                    self.logger.debug(f"Ignoring message from non-selected node {from_id}")
-                    return
-                
-                # Process keyword commands
-                if is_keyword:
-                    self.process_keyword_command(text_upper, from_id)
-                
-                # Process chatbot messages
-                elif not is_keyword and self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
-                    
-                    # Pass message to chatbot
-                    self.logger.info(f"Passing message to chatbot: {text[:50]}")
-                    try:
-                        self.chatbot_thinking = True
-                        response = self.chatbot.generate_response(text)
-                        self.chatbot_thinking = False
-                        if response:
-                            # Split long responses into multiple messages (200 char limit)
-                            chunks = self.split_message(response, max_length=200)
-                            self.logger.info(f"Split response into {len(chunks)} chunks")
-                            
-                            for i, chunk in enumerate(chunks):
-                                try:
-                                    self.interface.sendText(chunk, destinationId=from_id, wantAck=False)
-                                    self.logger.info(f"ChatBot response part {i+1}/{len(chunks)} sent: {chunk[:50]}")
-                                    
-                                    # Store each sent message in conversation
-                                    if from_id not in self.conversations:
-                                        self.conversations[from_id] = []
-                                    self.conversations[from_id].append({
-                                        'time': datetime.now().strftime('%H:%M:%S'),
-                                        'from': 'local',
-                                        'to': from_id,
-                                        'text': chunk,
-                                        'direction': 'sent'
-                                    })
-                                    
-                                    # Longer delay between messages to avoid interface issues
-                                    if i < len(chunks) - 1:
-                                        time.sleep(2)
-                                except Exception as send_error:
-                                    self.logger.error(f"Error sending chunk {i+1}/{len(chunks)}: {send_error}")
-                                    # Continue trying to send remaining chunks
-                                    time.sleep(2)
-                            
-                            self.add_activity(f"🤖 Replied to {from_id[:8]} ({len(chunks)} msg)")
-                        else:
-                            self.chatbot_thinking = False
-                            self.logger.warning("ChatBot generated no response")
-                    except Exception as e:
-                        self.chatbot_thinking = False
-                        self.logger.error(f"ChatBot error: {e}", exc_info=True)
-                
-                # Store the message
+                # Store the incoming message immediately (before processing)
                 node_name = from_id
                 node_info = self.get_node_info(from_id)
                 if node_info:
@@ -493,6 +434,72 @@ class MeshtasticTerminal:
                     'snr': snr,
                     'rssi': rssi
                 })
+                
+                # Check if this is a keyword command
+                text_upper = text.strip().upper()
+                keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
+                is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
+                
+                # Process keyword commands (only from selected nodes)
+                if is_keyword:
+                    if from_id in self.selected_nodes:
+                        self.process_keyword_command(text_upper, from_id)
+                    else:
+                        self.logger.debug(f"Ignoring keyword command from non-selected node {from_id}")
+                
+                # Process chatbot messages (from all nodes, with rate limiting)
+                # Only respond to direct messages (not channel broadcasts)
+                elif not is_keyword and self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
+                    # Check if this is a direct message to us (not a channel broadcast)
+                    # Direct messages either have toId set to our node or are sent on a DM channel
+                    is_direct_message = (to_id != '^all' and to_id != 'Unknown' and channel == 0)
+                    
+                    if not is_direct_message:
+                        self.logger.debug(f"Ignoring channel message from {from_id} (ch {channel}, toId {to_id})")
+                    else:
+                        # Pass message to chatbot
+                        self.logger.info(f"Passing DM to chatbot: {text[:50]}")
+                        try:
+                            self.chatbot_thinking = True
+                            response = self.chatbot.generate_response(text)
+                            self.chatbot_thinking = False
+                            if response:
+                                # Split long responses into multiple messages (200 char limit)
+                                chunks = self.split_message(response, max_length=200)
+                                self.logger.info(f"Split response into {len(chunks)} chunks")
+                                
+                                for i, chunk in enumerate(chunks):
+                                    try:
+                                        self.interface.sendText(chunk, destinationId=from_id, wantAck=False)
+                                        self.logger.info(f"ChatBot response part {i+1}/{len(chunks)} sent: {chunk[:50]}")
+                                        
+                                        # Store each sent message in conversation
+                                        if from_id not in self.conversations:
+                                            self.conversations[from_id] = []
+                                        self.conversations[from_id].append({
+                                            'time': datetime.now().strftime('%H:%M:%S'),
+                                            'from': 'local',
+                                            'to': from_id,
+                                            'text': chunk,
+                                            'direction': 'sent'
+                                        })
+                                        
+                                        # Longer delay between messages to avoid interface issues
+                                        if i < len(chunks) - 1:
+                                            time.sleep(2)
+                                    except Exception as send_error:
+                                        self.logger.error(f"Error sending chunk {i+1}/{len(chunks)}: {send_error}")
+                                        # Continue trying to send remaining chunks
+                                        time.sleep(2)
+                                
+                                self.add_activity(f"🤖 Replied to {from_id[:8]} ({len(chunks)} msg)")
+                            else:
+                                self.chatbot_thinking = False
+                                self.logger.warning("ChatBot generated no response")
+                        except Exception as e:
+                            self.chatbot_thinking = False
+                            self.logger.error(f"ChatBot error: {e}", exc_info=True)
+                
             elif portnum == 'ROUTING_APP':
                 # Handle ACK/NAK responses
                 self.handle_routing_response(packet)
@@ -1277,7 +1284,7 @@ class MeshtasticTerminal:
     
     def display_auto_send_status(self):
         """Display status during auto-send mode"""
-        self.clear_screen()
+        self.reset_cursor()
         self.print_header()
         
         # Show paused status if applicable
@@ -1290,7 +1297,7 @@ class MeshtasticTerminal:
         if self.chatbot and self.chatbot.is_available():
             if self.chatbot_enabled and self.chatbot.is_loaded():
                 if self.chatbot_thinking:
-                    print("🤖 ChatBot: ENABLED ✅ | 💭 Thinking...")
+                    print("🤖 ChatBot: ENABLED ✅ | \033[92m💭 Thinking...\033[0m")
                 else:
                     print("🤖 ChatBot: ENABLED ✅")
             else:
@@ -1571,6 +1578,10 @@ class MeshtasticTerminal:
     def clear_screen(self):
         """Clear terminal screen"""
         os.system('clear' if os.name != 'nt' else 'cls')
+    
+    def reset_cursor(self):
+        """Move cursor to home position without clearing (no flicker)"""
+        print('\033[H\033[J', end='', flush=True)  # Move to home and clear from cursor to end
         
     def print_header(self):
         """Print application header"""
