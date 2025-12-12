@@ -18,6 +18,7 @@ from typing import Optional, Dict, List
 import meshtastic
 import meshtastic.serial_interface
 from pubsub import pub
+from mesh_chatbot import MeshChatBot
 
 class MeshtasticTerminal:
     def __init__(self):
@@ -67,8 +68,24 @@ class MeshtasticTerminal:
         self.selected_nodes = []
         self.last_send_time = 0
         
+        # ChatBot initialization
+        self.chatbot = None
+        self.chatbot_enabled = False
+        self.chatbot_model_path = "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        self.chatbot_greeting = "Hello. I am MeshBot. How can I help you?"
+        
         # Load config
         self.load_config()
+        
+        # Initialize chatbot if available
+        try:
+            self.chatbot = MeshChatBot(model_path=self.chatbot_model_path, logger=self.logger)
+            if self.chatbot_greeting:
+                self.chatbot.set_greeting(self.chatbot_greeting)
+            self.logger.info(f"ChatBot initialized: available={self.chatbot.is_available()}")
+        except Exception as e:
+            self.logger.warning(f"ChatBot initialization failed: {e}")
+            self.chatbot = None
         
     def signal_handler(self, signum, frame):
         """Handle Ctrl+C and termination signals gracefully"""
@@ -163,7 +180,10 @@ class MeshtasticTerminal:
                     self.auto_send_enabled = config.get('auto_send_enabled', False)
                     self.auto_send_interval = config.get('auto_send_interval', 60)
                     self.selected_nodes = config.get('selected_nodes', [])
-                    msg = f"Loaded config: {len(self.selected_nodes)} nodes selected, auto_send={self.auto_send_enabled}"
+                    self.chatbot_enabled = config.get('chatbot_enabled', False)
+                    self.chatbot_model_path = config.get('chatbot_model_path', "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+                    self.chatbot_greeting = config.get('chatbot_greeting', "Hello. I am MeshBot. How can I help you?")
+                    msg = f"Loaded config: {len(self.selected_nodes)} nodes selected, auto_send={self.auto_send_enabled}, chatbot={self.chatbot_enabled}"
                     print(f"✅ {msg}")
                     self.logger.info(msg)
             else:
@@ -179,7 +199,10 @@ class MeshtasticTerminal:
             config = {
                 'auto_send_enabled': self.auto_send_enabled,
                 'auto_send_interval': self.auto_send_interval,
-                'selected_nodes': self.selected_nodes
+                'selected_nodes': self.selected_nodes,
+                'chatbot_enabled': self.chatbot_enabled,
+                'chatbot_model_path': self.chatbot_model_path,
+                'chatbot_greeting': self.chatbot_greeting
             }
             with open(self.config_file, 'w') as f:
                 json.dump(config, f, indent=2)
@@ -363,8 +386,40 @@ class MeshtasticTerminal:
                 self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
                 
                 # Check for keyword commands (only from target nodes)
+                is_keyword = False
                 if from_id in self.selected_nodes:
-                    self.process_keyword_command(text.strip().upper(), from_id)
+                    # Check if this is a keyword command
+                    text_upper = text.strip().upper()
+                    keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
+                    is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
+                    
+                    if is_keyword:
+                        self.process_keyword_command(text_upper, from_id)
+                    elif self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
+                        # Pass non-keyword message to chatbot
+                        self.logger.info(f"Passing message to chatbot: {text[:50]}")
+                        print(f"\n🤖 Generating response to message from {from_id[:8]}...")
+                        try:
+                            response = self.chatbot.generate_response(text)
+                            if response:
+                                self.interface.sendText(response, destinationId=from_id, wantAck=False)
+                                self.logger.info(f"ChatBot response sent: {response[:50]}")
+                                self.add_activity(f"🤖 Replied to {from_id[:8]}")
+                                
+                                # Store sent message in conversation
+                                if from_id not in self.conversations:
+                                    self.conversations[from_id] = []
+                                self.conversations[from_id].append({
+                                    'time': datetime.now().strftime('%H:%M:%S'),
+                                    'from': 'local',
+                                    'to': from_id,
+                                    'text': response,
+                                    'direction': 'sent'
+                                })
+                            else:
+                                self.logger.warning("ChatBot generated no response")
+                        except Exception as e:
+                            self.logger.error(f"ChatBot error: {e}")
                 
                 # Store the message
                 node_name = from_id
@@ -474,7 +529,51 @@ class MeshtasticTerminal:
                 self.logger.info(f"KEYWORDS requested by {from_id}")
                 print(f"\n📋 KEYWORDS requested by {from_id}")
                 self.add_activity(f"📋 KEYWORDS from {from_id}")
-                reply_message = "📋 Available: STOP START FREQ### RADIOCHECK WEATHERCHECK KEYWORDS"
+                chatbot_status = "CHATBOTON CHATBOTOFF" if self.chatbot and self.chatbot.is_available() else ""
+                reply_message = f"📋 Available: STOP START FREQ### RADIOCHECK WEATHERCHECK KEYWORDS {chatbot_status}"
+            elif text == 'CHATBOTON':
+                # Enable chatbot
+                if not self.chatbot or not self.chatbot.is_available():
+                    reply_message = "❌ ChatBot not available (install llama-cpp-python)"
+                elif not self.chatbot.model_exists():
+                    reply_message = "❌ ChatBot model not found"
+                else:
+                    self.logger.info(f"CHATBOTON requested by {from_id}")
+                    print(f"\n🤖 CHATBOTON requested by {from_id}")
+                    self.add_activity(f"🤖 CHATBOTON from {from_id}")
+                    
+                    if self.chatbot_enabled and self.chatbot.is_loaded():
+                        reply_message = "⚠️  ChatBot already enabled"
+                    else:
+                        print("Loading chatbot model...")
+                        if self.chatbot.load_model():
+                            self.chatbot_enabled = True
+                            self.save_config()
+                            print("✅ ChatBot enabled")
+                            # Send greeting message
+                            greeting = self.chatbot.get_greeting()
+                            self.interface.sendText(greeting, destinationId=from_id, wantAck=False)
+                            self.add_activity(f"🤖 Sent greeting to {from_id}")
+                            reply_message = "✅ CHATBOT ENABLED"
+                        else:
+                            reply_message = "❌ Failed to load chatbot model"
+            elif text == 'CHATBOTOFF':
+                # Disable chatbot
+                if not self.chatbot:
+                    reply_message = "❌ ChatBot not available"
+                else:
+                    self.logger.info(f"CHATBOTOFF requested by {from_id}")
+                    print(f"\n🤖 CHATBOTOFF requested by {from_id}")
+                    self.add_activity(f"🤖 CHATBOTOFF from {from_id}")
+                    
+                    if not self.chatbot_enabled:
+                        reply_message = "⚠️  ChatBot already disabled"
+                    else:
+                        self.chatbot.unload_model()
+                        self.chatbot_enabled = False
+                        self.save_config()
+                        print("✅ ChatBot disabled")
+                        reply_message = "✅ CHATBOT DISABLED"
             
             # Send auto-reply if a response was generated
             if reply_message and self.interface:
@@ -1063,6 +1162,14 @@ class MeshtasticTerminal:
             print("🛑 AUTO-SEND PAUSED (Send START to resume)")
         else:
             print("🔄 AUTO-SEND MODE ACTIVE")
+        
+        # Show chatbot status
+        if self.chatbot and self.chatbot.is_available():
+            if self.chatbot_enabled and self.chatbot.is_loaded():
+                print("🤖 ChatBot: ENABLED ✅")
+            else:
+                print("🤖 ChatBot: OFF")
+        
         print("=" * 120)
         
         # Build message panel for right side (40 chars wide)
@@ -1735,6 +1842,19 @@ class MeshtasticTerminal:
         print("   └─ Response: '📋 Available: STOP START FREQ## RADIOCHECK WEATHERCHECK KEYWORDS'")
         print("   └─ Useful for discovering what commands this station supports")
         print()
+        
+        if self.chatbot and self.chatbot.is_available():
+            print("7️⃣  CHATBOTON")
+            print("   └─ Enables the AI chatbot")
+            print("   └─ Loads TinyLlama model and begins responding to messages")
+            print("   └─ Response: Greeting message + '✅ CHATBOT ENABLED'")
+            print()
+            print("8️⃣  CHATBOTOFF")
+            print("   └─ Disables the AI chatbot")
+            print("   └─ Unloads model and frees memory")
+            print("   └─ Response: '✅ CHATBOT DISABLED'")
+            print()
+        
         print("-" * 80)
         print("⚙️  NOTES:")
         print("   • Commands only accepted from selected target nodes")
@@ -1744,6 +1864,141 @@ class MeshtasticTerminal:
         print("   • Command history visible in conversation view")
         print()
         self.get_single_key("Press any key to continue...")
+    
+    def configure_chatbot(self):
+        """Configure chatbot settings"""
+        while True:
+            self.clear_screen()
+            self.print_header()
+            
+            print("🤖 CHATBOT CONFIGURATION")
+            print("=" * 80)
+            print()
+            
+            # Check availability
+            if not self.chatbot or not self.chatbot.is_available():
+                print("❌ ChatBot not available")
+                print()
+                print("To enable chatbot:")
+                print("  1. Install: pip install llama-cpp-python")
+                print("  2. Download model: python download_model.py")
+                print("  3. Restart terminal monitor")
+                print()
+                self.get_single_key("Press any key to return...")
+                return
+            
+            # Show status
+            status = self.chatbot.get_status()
+            print(f"Backend: {status['backend']}")
+            print(f"Model: {status['model_path']}")
+            print(f"Model exists: {'✅' if status['model_exists'] else '❌'}")
+            print(f"Status: {'🟢 ENABLED' if self.chatbot_enabled and status['loaded'] else '🔴 DISABLED'}")
+            print(f"Greeting: {self.chatbot_greeting}")
+            print()
+            print("-" * 80)
+            print()
+            print("OPTIONS:")
+            print("1. Enable ChatBot")
+            print("2. Disable ChatBot")
+            print("3. Test ChatBot")
+            print("4. Change Greeting")
+            print("5. ChatBot Info")
+            print("B. Back to Main Menu")
+            print()
+            
+            choice = self.get_single_key("Enter choice: ").strip().upper()
+            
+            if choice == '1':
+                # Enable chatbot
+                if not status['model_exists']:
+                    print("\n❌ Model file not found!")
+                    print(f"Path: {self.chatbot_model_path}")
+                    print("\nDownload with: python download_model.py")
+                    time.sleep(3)
+                elif self.chatbot_enabled and status['loaded']:
+                    print("\n⚠️  ChatBot is already enabled")
+                    time.sleep(1.5)
+                else:
+                    print("\n🔄 Loading model...")
+                    if self.chatbot.load_model():
+                        self.chatbot_enabled = True
+                        self.save_config()
+                        print("✅ ChatBot enabled successfully!")
+                        time.sleep(1.5)
+                    else:
+                        print("❌ Failed to load model")
+                        time.sleep(2)
+                        
+            elif choice == '2':
+                # Disable chatbot
+                if not self.chatbot_enabled:
+                    print("\n⚠️  ChatBot is already disabled")
+                    time.sleep(1.5)
+                else:
+                    self.chatbot.unload_model()
+                    self.chatbot_enabled = False
+                    self.save_config()
+                    print("\n✅ ChatBot disabled")
+                    time.sleep(1.5)
+                    
+            elif choice == '3':
+                # Test chatbot
+                if not self.chatbot_enabled or not status['loaded']:
+                    print("\n⚠️  Enable ChatBot first")
+                    time.sleep(1.5)
+                else:
+                    print("\n🧪 Testing ChatBot...")
+                    print()
+                    test_msg = "Hello, can you hear me?"
+                    print(f"Test message: {test_msg}")
+                    print("Generating response...")
+                    response = self.chatbot.generate_response(test_msg)
+                    if response:
+                        print(f"\n🤖 Response: {response}")
+                    else:
+                        print("\n❌ No response generated")
+                    print()
+                    self.get_single_key("Press any key to continue...")
+                    
+            elif choice == '4':
+                # Change greeting
+                print("\n💬 Current greeting:")
+                print(f"   {self.chatbot_greeting}")
+                print()
+                new_greeting = self.get_line_input("Enter new greeting (or blank to cancel): ").strip()
+                if new_greeting:
+                    self.chatbot_greeting = new_greeting
+                    if self.chatbot:
+                        self.chatbot.set_greeting(new_greeting)
+                    self.save_config()
+                    print("✅ Greeting updated")
+                    time.sleep(1.5)
+                    
+            elif choice == '5':
+                # Show info
+                print("\n📖 CHATBOT INFORMATION")
+                print("=" * 80)
+                print()
+                print("Model: TinyLlama-1.1B-Chat (Q4_K_M quantization)")
+                print("Size: ~638 MB")
+                print("Speed: 4-7 seconds per response on Pi5")
+                print("Memory: ~1GB RAM when loaded")
+                print()
+                print("Features:")
+                print("  • Responds to all non-keyword messages from target nodes")
+                print("  • Keywords (STOP, START, etc.) always take priority")
+                print("  • Responses limited to 200 characters for Meshtastic")
+                print("  • Fully local AI - no cloud/internet needed")
+                print("  • Apache 2.0 license - completely open source")
+                print()
+                print("Control via mesh:")
+                print("  • Send CHATBOTON to enable remotely")
+                print("  • Send CHATBOTOFF to disable remotely")
+                print()
+                self.get_single_key("Press any key to continue...")
+                
+            elif choice == 'B':
+                return
     
     def run_auto_send_dashboard(self):
         """Run the auto-send dashboard with live updates"""
@@ -1818,10 +2073,11 @@ class MeshtasticTerminal:
             print("3. Send Telemetry Now")
             print("4. Manage Encryption Keys")
             print("5. View Command Words")
-            print("6. Start Auto-Send")
-            print("7. Stop Auto-Send")
-            print("8. View Dashboard")
-            print("9. Exit")
+            print("6. Configure ChatBot")
+            print("7. Start Auto-Send")
+            print("8. Stop Auto-Send")
+            print("9. View Dashboard")
+            print("0. Exit")
             print()
             
             choice = self.get_single_key("Enter choice: ").strip()
@@ -1838,6 +2094,8 @@ class MeshtasticTerminal:
             elif choice == '5':
                 self.show_command_help()
             elif choice == '6':
+                self.configure_chatbot()
+            elif choice == '7':
                 # Start auto-send dashboard mode
                 if not self.auto_send_enabled:
                     print("\n⚠️  Auto-send is disabled. Enable it in Configure Auto-Send first.")
@@ -1850,7 +2108,7 @@ class MeshtasticTerminal:
                     time.sleep(1)
                     # Run the auto-send dashboard loop
                     self.run_auto_send_dashboard()
-            elif choice == '7':
+            elif choice == '8':
                 # Stop auto-send
                 if self.auto_send_enabled:
                     self.auto_send_enabled = False
@@ -1859,13 +2117,13 @@ class MeshtasticTerminal:
                 else:
                     print("\n⚠️  Auto-send is already disabled")
                 time.sleep(1.5)
-            elif choice == '8':
+            elif choice == '9':
                 # View dashboard without auto-send
                 print("\nOpening dashboard view...")
                 time.sleep(1)
                 self.display_auto_send_status()
                 self.get_single_key("\nPress any key to return to menu...")
-            elif choice == '9':
+            elif choice == '0':
                 print("\nExiting...")
                 sys.exit(0)
                 
