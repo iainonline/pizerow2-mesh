@@ -781,7 +781,7 @@ class MeshtasticTerminal:
                 sys.exit(0)
                 
     def auto_start_countdown(self):
-        """3 second countdown to auto-start"""
+        """10 second countdown to auto-start"""
         print("=" * 60)
         print("    MESHTASTIC TERMINAL MONITOR - AUTO START")
         print("=" * 60)
@@ -801,7 +801,7 @@ class MeshtasticTerminal:
             print("⏸️  Auto-send: DISABLED")
         
         print()
-        for i in range(3, 0, -1):
+        for i in range(10, 0, -1):
             print(f"Starting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
             time.sleep(1)
         print()
