@@ -802,7 +802,7 @@ class MeshtasticTerminal:
         
         print()
         for i in range(3, 0, -1):
-            print(f"Starting in {i} seconds... (Press Ctrl+C to enter menu)", end='\r')
+            print(f"Starting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
             time.sleep(1)
         print()
         
