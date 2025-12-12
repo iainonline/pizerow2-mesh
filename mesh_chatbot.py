@@ -146,7 +146,7 @@ class MeshChatBot:
         # TinyLlama chat format
         system_prompt = (
             "You are a helpful assistant on a mesh radio network. "
-            "Keep responses brief (under 200 characters), friendly, and informative. "
+            "Give clear, friendly, and informative responses. "
             "You are helping users with questions about their mesh network, devices, or general topics."
         )
         
@@ -185,9 +185,9 @@ class MeshChatBot:
             if self.backend == "llama-cpp-python":
                 output = self.model(
                     prompt,
-                    max_tokens=150,  # Allow longer responses (will be split by caller)
+                    max_tokens=200,  # Allow longer responses (will be split by caller)
                     temperature=self.temperature,
-                    stop=["</s>", "<|", "\n\n"],  # Stop tokens
+                    stop=["</s>", "<|user|>", "<|system|>"],  # Stop tokens
                     echo=False
                 )
                 response = output['choices'][0]['text'].strip()
@@ -195,9 +195,9 @@ class MeshChatBot:
             elif self.backend == "ctransformers":
                 response = self.model(
                     prompt,
-                    max_new_tokens=150,
+                    max_new_tokens=200,
                     temperature=self.temperature,
-                    stop=["</s>", "<|", "\n\n"]
+                    stop=["</s>", "<|user|>", "<|system|>"]
                 ).strip()
             
             # Note: Responses longer than 200 chars will be split into multiple
