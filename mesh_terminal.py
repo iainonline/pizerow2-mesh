@@ -801,9 +801,16 @@ class MeshtasticTerminal:
             print("⏸️  Auto-send: DISABLED")
         
         print()
+        import select
         for i in range(10, 0, -1):
-            print(f"Starting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
-            time.sleep(1)
+            print(f"Starting in {i} seconds... (Press X to eXit autostart)", end='\r')
+            # Check for 'x' key press with 1 second timeout
+            if select.select([sys.stdin], [], [], 1)[0]:
+                key = sys.stdin.read(1).strip().upper()
+                if key == 'X':
+                    raise KeyboardInterrupt  # Use existing cancel mechanism
+            else:
+                time.sleep(0)  # select already waited 1 second
         print()
         
 def main():
