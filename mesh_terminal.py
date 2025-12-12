@@ -587,55 +587,79 @@ class MeshtasticTerminal:
     def configure_auto_send(self):
         """Configure auto-send settings"""
         while True:
-            self.clear_screen()
-            self.print_header()
-            
-            print("🚀 AUTO-SEND CONFIGURATION")
-            print("-" * 60)
-            print(f"Status: {'✅ ENABLED' if self.auto_send_enabled else '❌ DISABLED'}")
-            print(f"Interval: {self.auto_send_interval} seconds")
-            print(f"Selected Nodes: {len(self.selected_nodes)}")
-            
-            if self.auto_send_enabled:
-                elapsed = time.time() - self.last_send_time
-                remaining = max(0, self.auto_send_interval - elapsed)
-                print(f"Next send in: {int(remaining)} seconds")
-            
-            print()
-            print("1. Toggle Enable/Disable")
-            print("2. Set Interval")
-            print("3. Select Nodes")
-            print("4. Test Send Now")
-            print("5. Return to Main Menu")
-            print()
-            
-            choice = input("Enter choice: ").strip()
-            
-            if choice == '1':
-                self.auto_send_enabled = not self.auto_send_enabled
-                self.save_config()
-                print(f"Auto-send {'ENABLED' if self.auto_send_enabled else 'DISABLED'}")
-                time.sleep(1)
-            elif choice == '2':
-                try:
-                    interval = int(input("Enter interval in seconds (min 30): "))
-                    if interval >= 30:
-                        self.auto_send_interval = interval
-                        self.save_config()
-                        print(f"✅ Interval set to {interval} seconds")
-                    else:
-                        print("❌ Interval must be at least 30 seconds")
+            try:
+                self.clear_screen()
+                self.print_header()
+                
+                print("🚀 AUTO-SEND CONFIGURATION")
+                print("-" * 60)
+                print(f"Status: {'✅ ENABLED' if self.auto_send_enabled else '❌ DISABLED'}")
+                print(f"Interval: {self.auto_send_interval} seconds")
+                print(f"Selected Nodes: {len(self.selected_nodes)}")
+                
+                # Show selected nodes
+                if self.selected_nodes:
+                    print("\n📋 Sending to:")
+                    for node_id in self.selected_nodes:
+                        # Find node name
+                        node_name = "Unknown"
+                        if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
+                            for node in self.interface.nodes.values():
+                                node_num = node.get('num')
+                                if node_num and f"!{node_num:08x}" == node_id:
+                                    node_name = node.get('user', {}).get('longName', 'Unknown')
+                                    break
+                        print(f"  • {node_name} ({node_id})")
+                
+                if self.auto_send_enabled:
+                    elapsed = time.time() - self.last_send_time
+                    remaining = max(0, self.auto_send_interval - elapsed)
+                    print(f"\n⏱️  Next send in: {int(remaining)} seconds")
+                
+                print()
+                print("1. Toggle Enable/Disable")
+                print("2. Set Interval")
+                print("3. Select Nodes")
+                print("4. Test Send Now")
+                print("5. Return to Main Menu")
+                print()
+                
+                choice = input("Enter choice: ").strip()
+                self.logger.info(f"Auto-send menu choice: {choice}")
+                
+                if choice == '1':
+                    self.auto_send_enabled = not self.auto_send_enabled
+                    self.save_config()
+                    msg = f"Auto-send {'ENABLED' if self.auto_send_enabled else 'DISABLED'}"
+                    print(msg)
+                    self.logger.info(msg)
                     time.sleep(1)
-                except ValueError:
-                    print("❌ Invalid number")
-                    time.sleep(1)
-            elif choice == '3':
-                self.select_nodes()
-            elif choice == '4':
-                self.send_telemetry()
+                elif choice == '2':
+                    try:
+                        interval = int(input("Enter interval in seconds (min 30): "))
+                        if interval >= 30:
+                            self.auto_send_interval = interval
+                            self.save_config()
+                            msg = f"Interval set to {interval} seconds"
+                            print(f"✅ {msg}")
+                            self.logger.info(msg)
+                        else:
+                            print("❌ Interval must be at least 30 seconds")
+                        time.sleep(1)
+                    except ValueError:
+                        print("❌ Invalid number")
+                        time.sleep(1)
+                elif choice == '3':
+                    self.select_nodes()
+                elif choice == '4':
+                    self.send_telemetry()
+                    time.sleep(2)
+                elif choice == '5':
+                    return
+            except Exception as e:
+                self.logger.error(f"Error in configure_auto_send: {e}", exc_info=True)
+                print(f"Error: {e}")
                 time.sleep(2)
-            elif choice == '5':
-                return
                 
     def manage_keys(self):
         """Manage encryption keys"""
@@ -645,12 +669,25 @@ class MeshtasticTerminal:
         print("🔐 ENCRYPTION KEY MANAGEMENT")
         print("-" * 60)
         print()
-        print("ℹ️  Direct Messages use PKC (Public Key Cryptography)")
-        print("   Firmware 2.5.0+ automatically encrypts DMs")
-        print("   No manual key management needed for person-to-person messages")
+        print("ℹ️  DIRECT MESSAGES (Person-to-Person):")
+        print("   ✅ Uses PKC (Public Key Cryptography) - firmware 2.5.0+")
+        print("   ✅ Automatically encrypted end-to-end")
+        print("   ✅ No manual key management needed")
+        print("   ✅ Only sender and recipient can read messages")
         print()
-        print("For channel encryption, use the Meshtastic mobile app or CLI:")
-        print("  meshtastic --set-channel --channel-name MyChannel --psk <base64-key>")
+        print("   This program sends DIRECT MESSAGES with wantAck=True")
+        print("   Messages are automatically encrypted using PKC")
+        print("   Recipient's device decrypts using their private key")
+        print()
+        print("💡 TROUBLESHOOTING - If recipient not receiving messages:")
+        print("   1. Check recipient device is online (check lastHeard time)")
+        print("   2. Ensure recipient is within mesh range or multi-hop route exists")
+        print("   3. Check recipient's firmware is 2.5.0+ for PKC support")
+        print("   4. Verify recipient's device is not in sleep mode")
+        print("   5. Check this log file for send confirmations")
+        print()
+        print("📡 For channel (broadcast) encryption:")
+        print("   Use: meshtastic --set-channel --channel-name MyChannel --psk <base64-key>")
         print()
         input("Press Enter to continue...")
         
@@ -689,7 +726,7 @@ class MeshtasticTerminal:
                 sys.exit(0)
                 
     def auto_start_countdown(self):
-        """10 second countdown to auto-start"""
+        """3 second countdown to auto-start"""
         print("=" * 60)
         print("    MESHTASTIC TERMINAL MONITOR - AUTO START")
         print("=" * 60)
@@ -699,11 +736,17 @@ class MeshtasticTerminal:
         if self.auto_send_enabled:
             print(f"✅ Auto-send: ENABLED ({self.auto_send_interval}s interval)")
             print(f"📝 Selected nodes: {len(self.selected_nodes)}")
+            
+            # Show which nodes will receive messages
+            if self.selected_nodes and self.interface and hasattr(self.interface, 'nodes'):
+                print("\n📋 Sending to:")
+                for node_id in self.selected_nodes:
+                    print(f"  • {node_id}")
         else:
             print("⏸️  Auto-send: DISABLED")
         
         print()
-        for i in range(10, 0, -1):
+        for i in range(3, 0, -1):
             print(f"Starting in {i} seconds... (Press Ctrl+C to enter menu)", end='\r')
             time.sleep(1)
         print()
