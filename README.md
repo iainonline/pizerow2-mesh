@@ -1,6 +1,6 @@
-# Meshtastic Monitor Dashboard
+# Meshtastic Terminal Monitor
 
-A real-time GUI monitoring dashboard for Meshtastic mesh networks on Raspberry Pi. Monitor telemetry, nodes, messages, and network statistics while sending encrypted private telemetry reports to selected nodes.
+A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, and track mesh network activity.
 
 ![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-red?style=flat-square&logo=raspberry-pi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
@@ -10,73 +10,82 @@ A real-time GUI monitoring dashboard for Meshtastic mesh networks on Raspberry P
 ## Features
 
 ### 📊 Real-Time Monitoring
-- **Device Telemetry**: Battery level, voltage, channel utilization, air utilization, uptime
-- **Environment Sensors**: Temperature, humidity, barometric pressure (when available)
-- **Mesh Nodes**: Live list with SNR values and last-heard timestamps
-- **Network Statistics**: Total nodes, online nodes, packet counts, message counts
-- **LoRa Traffic Feed**: Color-coded real-time message feed
+- **Device Telemetry**: Battery level, voltage, channel utilization, air utilization
+- **Environment Sensors**: Temperature, humidity, barometric pressure (BME280 when available)
+- **Signal Strength**: SNR and RSSI tracking per node
+- **Network Statistics**: Total nodes, packet RX/TX counts
+- **NoT Indicator**: Clear "No Telemetry" flag when sensor data is unavailable
+- **Comprehensive Logging**: All activity logged to file for debugging
 
 ### 🚀 Auto-Send Telemetry
-- **Scheduled Reporting**: Automatically send telemetry reports at configurable intervals
-- **Node Selection**: Choose specific nodes to receive reports via intuitive GUI
-- **Private Messages**: Uses encrypted Direct Messages (DM) - only recipients can decrypt
+- **Immediate Send**: Sends telemetry immediately on startup
+- **Scheduled Reporting**: Automatically send telemetry at configurable intervals (minimum 30 seconds)
+- **Node Selection**: Choose specific nodes to receive encrypted direct messages
+- **Live Status Display**: Updates every 10 seconds showing:
+  - Local sensor data (temperature, humidity, pressure)
+  - Device status (battery, voltage)
+  - Target node information (name, last heard, signal strength)
+  - Countdown to next send
 - **Configuration Persistence**: Settings saved across sessions
 
 ### 🛡️ Security
-- **PKC Encryption**: Automatic Public Key Cryptography for DMs (firmware 2.5.0+)
-- **Channel Encryption**: Supports AES128/AES256 channel-based encryption
-- **No Spam**: Private messages don't clutter public channels
+- **PKC Encryption**: Automatic Public Key Cryptography for Direct Messages (firmware 2.5.0+)
+- **Private Messaging**: Recipients see messages in their DM inbox
+- **No Manual Keys**: Key exchange happens automatically
 
-### 🎨 User Interface
-- **Dark Theme**: Easy on the eyes for long monitoring sessions
-- **Live Updates**: Real-time refresh without performance impact
-- **Click-to-Select**: Intuitive node selection with visual feedback
-- **Countdown Timer**: Shows time until next auto-send
+### 💻 Terminal Interface
+- **Numbered Menu Navigation**: Simple 1-5 option menus
+- **Auto-Start Mode**: 10-second countdown with X key to cancel
+- **Background Operation**: M key to access menu anytime
+- **Graceful Shutdown**: Ctrl+C for clean exit
+- **Headless Optimized**: No GUI dependencies, perfect for SSH access
 
 ## Hardware Requirements
 
 ### Raspberry Pi
-- **Raspberry Pi 5** (recommended)
-- Raspberry Pi 4/3 (compatible)
+- **Raspberry Pi Zero 2 W** (primary target - tested and optimized)
+- Raspberry Pi 5/4/3/Zero W (compatible)
 - **USB Port**: For serial connection to Meshtastic device
 
 ### Meshtastic Device
 - **Heltec WiFi LoRa 32 V3** (tested)
 - Other Meshtastic-compatible devices with USB serial support
 - **Firmware**: v2.5.0 or higher (for PKC encryption features)
+- **Optional**: BME280 sensor for environment telemetry
 
 ## Software Requirements
 
 - **Operating System**: Raspberry Pi OS (Bookworm/Bullseye)
 - **Python**: 3.9 or higher
-- **Packages**: tkinter (usually included), meshtastic, pypubsub
+- **Packages**: meshtastic, pypubsub
 
 ## Installation
 
-### 1. Clone Repository
-
-```
-
-### 2. Install Dependencies
+### Quick Install on Raspberry Pi Zero 2 W
 
 ```bash
-# Ensure tkinter is installed (usually pre-installed on Raspberry Pi OS)
-sudo apt-get install python3-tk
+# 1. Clone the repository
+cd ~
+git clone https://github.com/iainonline/pizerow2-mesh.git Meshtastic
+cd Meshtastic
 
-# Create virtual environment
+# 2. Create Python virtual environment
 python3 -m venv venv
 
-# Activate virtual environment
+# 3. Activate virtual environment
 source venv/bin/activate
 
-# Install Python packages
-pip install meshtastic pypubsub
+# 4. Install requirements
+pip install -r requirements.txt
+
+# 5. Make start script executable (optional)
+chmod +x start_terminal.sh
 ```
 
-### 3. Connect Device
+### Connect Meshtastic Device
 
 ```bash
-# Connect Heltec V3 via USB cable
+# Connect Heltec V3 (or other device) via USB cable
 # Device should appear as /dev/ttyUSB0 (or similar)
 
 # Check connection
@@ -89,122 +98,145 @@ sudo usermod -a -G dialout $USER
 
 ## Quick Start
 
-### Running the Monitor
+### Running the Terminal Monitor
 
 ```bash
-# Activate virtual environment
+# Option 1: Use the start script
+./start_terminal.sh
+
+# Option 2: Run directly
 source venv/bin/activate
-
-# Run the monitor dashboard
-python mesh_monitor.py
+python mesh_terminal.py
 ```
 
-Or use the convenience script:
+The program will:
+1. Load saved configuration (if exists)
+2. Show 10-second countdown (press X to cancel autostart)
+3. Connect to Meshtastic device via USB
+4. Send telemetry immediately on startup
+5. Enter auto-send mode (or manual menu if cancelled)
 
+## Using the Terminal Monitor
+
+### Auto-Send Mode
+
+When auto-send is enabled, the display updates every 10 seconds showing:
+
+- **Local Sensor Data**: Temperature, humidity, pressure (if BME280 present)
+- **Device Status**: Battery level, voltage
+- **Target Nodes**: Name, last heard time, signal strength (SNR/RSSI)
+- **Countdown**: Time remaining until next send
+
+**Controls**:
+- Press **M** then Enter to access menu
+- Press **Ctrl+C** to exit gracefully
+
+### Main Menu
+
+When in menu mode (or after pressing M), you'll see numbered options:
+
+1. **View Current Telemetry**
+   - Shows local device telemetry
+   - Environment sensors (BME280) if available
+   - Device metrics (battery, voltage, utilization)
+
+2. **Configure Auto-Send**
+   - Toggle auto-send on/off
+   - Set interval (minimum 30 seconds, recommended 60+)
+   - Select target nodes
+   - Test send immediately
+
+3. **Send Telemetry Now**
+   - Immediately send to all selected nodes
+   - Useful for testing
+
+4. **Manage Encryption Keys**
+   - Information about PKC encryption
+   - Troubleshooting guide for Direct Messages
+
+5. **Exit**
+   - Gracefully close the application
+
+### Selecting Target Nodes
+
+In "Configure Auto-Send" menu, choose "Select Nodes":
+- View list of all discovered nodes
+- Enter node number to toggle selection
+- Selected nodes marked with ✅
+- Press Enter (blank) when done
+
+### Message Format
+
+Messages sent contain available data:
+
+**With Sensor Data**:
+```
+⏰ 18:45:30 | 🌡️ 78.5°F | 💧 52.3% | 🔘 924.9hPa | 📶 SNR: 6.5dB | 📡 RSSI: -42dBm | 🔋 96% | ⚡ 4.14V | 📻 CH:5.1% | 🌐 Air:1.2% | 👥 100
+```
+
+**Without Sensor Data** (NoT = No Telemetry):
+```
+NoT | ⏰ 18:45:30 | 📶 SNR: 7.0dB | 📡 RSSI: -46dBm | 🔋 96% | ⚡ 4.14V | 📻 CH:13.3% | 🌐 Air:1.1% | 👥 100
+```
+
+### Message Delivery
+
+Messages are sent as **encrypted Direct Messages (DMs)** to selected nodes:
+- Recipients see messages in their **Direct Messages inbox** (not main channel)
+- Uses PKC (Public Key Cryptography) - firmware 2.5.0+
+- Key exchange happens automatically - no manual setup needed
+- Check **DM tab** on recipient devices to see messages
+
+### Viewing Sent Messages
+
+Check the log file for detailed activity:
 ```bash
-# Make executable (first time only)
-chmod +x start.sh
-
-# Run with virtual environment activation
-./start.sh
+tail -f mesh_terminal.log
 ```
 
-## Using the Dashboard
-
-### Main Interface
-
-The dashboard is divided into four main sections:
-
-1. **Top Left - Device Telemetry**
-   - Real-time battery, voltage, and utilization metrics
-   - Environment sensor readings (temperature, humidity, pressure)
-
-2. **Bottom Left - Mesh Nodes**
-   - Live list of all nodes on the mesh
-   - SNR values and last-heard timestamps
-   - Automatically updates as nodes are discovered
-
-3. **Top Right - Network Statistics**
-   - Total nodes, packets sent/received
-   - Message counts
-
-4. **Bottom Right - Auto-Send Control**
-   - Enable/disable automatic telemetry reports
-   - Configure sending interval
-   - Select recipient nodes
-   - Test send button
-
-5. **Bottom - LoRa Traffic Feed**
-   - Real-time message log with color coding
-   - Shows all mesh traffic including your sent messages
-
-### Sending Telemetry Reports
-
-1. **Wait for nodes to appear** in the Mesh Nodes list
-2. **Click "Select Nodes"** button
-3. **Click nodes to toggle selection** (they'll highlight green)
-4. **Click "Save Selection"** to confirm
-5. **Set your desired interval** in seconds (minimum 30)
-6. **Enable "Auto-Send"** checkbox
-7. **Monitor the countdown** - telemetry will be sent automatically
-
-### Test Before Auto-Send
-
-Use the **"Test Send Now"** button to immediately send a telemetry report to your selected nodes and verify it's working.
+Log shows:
+- Connection status
+- All packet RX/TX
+- Telemetry sends with full message content
+- Node discoveries with signal strength
+- Any errors with stack traces
 
 ## Configuration Files
 
-### monitor_config.json
+### terminal_config.json
 
-Automatically created on first save. Stores:
+Automatically created when you save settings. Stores:
 - `auto_send_enabled`: Whether auto-send is active
-- `auto_send_interval`: Seconds between sends
+- `auto_send_interval`: Seconds between sends (minimum 30)
 - `selected_nodes`: List of node IDs to receive reports
 
 Example:
 ```json
 {
   "auto_send_enabled": true,
-  "auto_send_interval": 300,
-  "selected_nodes": ["!a1b2c3d4", "!e5f6g7h8"]
+  "auto_send_interval": 60,
+  "selected_nodes": ["!9e757a8c", "!9e761374"]
 }
 ```
-
-## Telemetry Configuration
-
-### Setting Telemetry Intervals
-
-Use the included `set_telemetry.py` script to configure device telemetry broadcast intervals:
-
-```bash
-source venv/bin/activate
-python set_telemetry.py
-```
-
-This sets both environment and device telemetry intervals to 60 seconds.
 
 ## Security & Privacy
 
 ### Encryption
 
-**Direct Messages (Auto-Send)**:
+**Direct Messages (DM)**:
 - Uses PKC (Public Key Cryptography) automatically on firmware 2.5.0+
 - Only the selected recipient can decrypt messages
 - Messages are signed to verify sender identity
+- No manual key management required
 - No private data visible to other mesh participants
-
-**Channel Messages**:
-- Use the primary channel's PSK (Pre-Shared Key)
-- All nodes on the channel can decrypt if they have the PSK
-- Change PSK for enhanced privacy
 
 ### Best Practices
 
-- ✅ Keep firmware updated (2.5.0+ recommended)
-- ✅ Use Direct Messages for sensitive telemetry
-- ✅ Change default channel PSK on primary channel
-- ✅ Don't send telemetry more frequently than needed
-- ✅ Monitor your air utilization percentage
+- ✅ Keep firmware updated (2.5.0+ for PKC)
+- ✅ Use recommended intervals (60+ seconds)
+- ✅ Check log file for troubleshooting
+- ✅ Monitor air utilization percentage (keep under 10%)
+- ✅ Verify recipients check their DM inbox
 
 ## Troubleshooting
 
@@ -387,17 +419,33 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v2.0.0 (Current)
+### v3.0.0 (Current - Terminal Edition)
+- **Terminal-based interface** - No GUI dependencies, perfect for headless operation
+- **Raspberry Pi Zero 2 W optimized** - Lightweight and SSH-friendly
+- **Enhanced auto-send display** - Live updates every 10 seconds with:
+  - Local sensor data (BME280 temperature, humidity, pressure)
+  - Device status (battery, voltage)
+  - Target node information (name, last heard, signal strength)
+  - Countdown to next send
+- **Immediate send on startup** - No waiting for first telemetry
+- **NoT indicator** - Clear "No Telemetry" flag when sensor data unavailable
+- **Comprehensive logging** - All activity to `mesh_terminal.log` with DEBUG level
+- **M key menu access** - Enter menu anytime during auto-send
+- **X key autostart cancel** - 10-second countdown with option to cancel
+- **Graceful shutdown** - Ctrl+C exits cleanly
+- **Signal strength tracking** - Per-node SNR/RSSI in real-time
+- **PKC Direct Messages** - Automatic encryption (firmware 2.5.0+)
+- **Configuration persistence** - Settings saved to `terminal_config.json`
+
+### v2.0.0 (Legacy - GUI Version)
 - Complete GUI dashboard with real-time monitoring
 - Auto-send telemetry with encrypted Direct Messages
 - Node selection interface with persistence
 - Network statistics and LoRa traffic feed
 - Environment sensor support
-- PKC encryption support (firmware 2.5.0+)
-- USB serial connection (removed BLE dependency)
 - Dark theme GUI optimized for long sessions
 
-### v1.0.0 (Legacy)
+### v1.0.0 (Legacy - BLE CLI)
 - BLE communication support
 - CLI menu interface
 - Basic telemetry monitoring
@@ -405,3 +453,4 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 ---
 
 **Made for the Meshtastic community 📡**
+**Optimized for Raspberry Pi Zero 2 W headless operation**

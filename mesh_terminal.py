@@ -212,6 +212,15 @@ class MeshtasticTerminal:
             if isinstance(rssi, (int, float)):
                 self.latest_rssi = rssi
             
+            # Track signal strength per node
+            if from_id and from_id != 'Unknown':
+                if from_id not in self.nodes_data:
+                    self.nodes_data[from_id] = {}
+                if isinstance(snr, (int, float)):
+                    self.nodes_data[from_id]['last_snr'] = snr
+                if isinstance(rssi, (int, float)):
+                    self.nodes_data[from_id]['last_rssi'] = rssi
+            
             # Log packet details
             self.logger.debug(f"RX: {portnum} from {from_id} | SNR: {snr} | RSSI: {rssi}")
             
@@ -280,6 +289,7 @@ class MeshtasticTerminal:
                         lines.append(f"🔗 Hops: {hops_away}")
                     break
         
+        has_sensor_data = False
         if self.telemetry_history:
             latest = self.telemetry_history[-1]
             
@@ -288,14 +298,17 @@ class MeshtasticTerminal:
             if temp is not None:
                 temp_f = (temp * 9/5) + 32
                 lines.append(f"🌡️ {temp_f:.1f}°F")
+                has_sensor_data = True
                 
             humidity = latest.get('humidity')
             if humidity is not None:
                 lines.append(f"💧 {humidity:.1f}%")
+                has_sensor_data = True
                 
             pressure = latest.get('pressure')
             if pressure is not None:
                 lines.append(f"🔘 {pressure:.1f}hPa")
+                has_sensor_data = True
             
             # Signal strength
             if self.latest_snr is not None:
@@ -327,6 +340,10 @@ class MeshtasticTerminal:
         # Node count
         if self.interface and self.interface.nodes:
             lines.append(f"👥 {len(self.interface.nodes)}")
+        
+        # Prepend NoT if no sensor telemetry data
+        if not has_sensor_data:
+            lines.insert(0, "NoT")
         
         return " | ".join(lines)
         
@@ -387,12 +404,111 @@ class MeshtasticTerminal:
             
     def auto_send_worker(self):
         """Background worker for auto-send"""
+        last_display = 0
+        display_interval = 10  # Update display every 10 seconds
+        
         while True:
             if self.auto_send_enabled and self.connected:
                 elapsed = time.time() - self.last_send_time
+                
+                # Display status every 10 seconds
+                if time.time() - last_display >= display_interval:
+                    self.display_auto_send_status()
+                    last_display = time.time()
+                
                 if elapsed >= self.auto_send_interval:
                     self.send_telemetry()
             time.sleep(1)
+    
+    def display_auto_send_status(self):
+        """Display status during auto-send mode"""
+        self.clear_screen()
+        self.print_header()
+        
+        print("🔄 AUTO-SEND MODE ACTIVE")
+        print("=" * 60)
+        
+        # Show sensor data if available
+        if self.telemetry_history:
+            latest = self.telemetry_history[-1]
+            temp = latest.get('temperature')
+            humidity = latest.get('humidity')
+            pressure = latest.get('pressure')
+            
+            if temp is not None or humidity is not None or pressure is not None:
+                print("\n🌡️  LOCAL SENSOR DATA:")
+                if temp is not None:
+                    temp_f = (temp * 9/5) + 32
+                    print(f"   Temperature: {temp_f:.1f}°F ({temp:.1f}°C)")
+                if humidity is not None:
+                    print(f"   Humidity: {humidity:.1f}%")
+                if pressure is not None:
+                    print(f"   Pressure: {pressure:.1f} hPa")
+            else:
+                print("\n⚠️  No BME280 sensor detected")
+            
+            # Device metrics
+            battery = latest.get('battery')
+            voltage = latest.get('voltage')
+            if battery is not None or voltage is not None:
+                print("\n🔋 DEVICE STATUS:")
+                if battery is not None:
+                    if battery == 101:
+                        print("   Power: USB/Solar")
+                    else:
+                        print(f"   Battery: {battery}%")
+                if voltage is not None:
+                    print(f"   Voltage: {voltage:.2f}V")
+        
+        # Show target nodes
+        if self.selected_nodes:
+            print(f"\n📡 TARGET NODES ({len(self.selected_nodes)}):")
+            print("-" * 60)
+            
+            for node_id in self.selected_nodes:
+                node_info = self.get_node_info(node_id)
+                if node_info:
+                    name = node_info.get('user', {}).get('longName', 'Unknown')
+                    last_heard = node_info.get('lastHeard', 0)
+                    
+                    # Calculate time since last heard
+                    if last_heard:
+                        age = time.time() - last_heard
+                        if age < 60:
+                            age_str = f"{int(age)}s ago"
+                        elif age < 3600:
+                            age_str = f"{int(age/60)}m ago"
+                        else:
+                            age_str = f"{int(age/3600)}h ago"
+                    else:
+                        age_str = "Never"
+                    
+                    # Get signal strength
+                    snr = node_info.get('snr')
+                    rssi = node_info.get('deviceMetrics', {}).get('airUtilTx', 0)  # Try device metrics
+                    
+                    # Display node info
+                    print(f"\n  {name} ({node_id})")
+                    print(f"  └─ Last heard: {age_str}")
+                    
+                    # Show signal if we have recent data
+                    if node_id in self.nodes_data and 'last_snr' in self.nodes_data[node_id]:
+                        snr = self.nodes_data[node_id].get('last_snr')
+                        rssi = self.nodes_data[node_id].get('last_rssi')
+                        if snr is not None:
+                            print(f"  └─ SNR: {snr:.1f} dB")
+                        if rssi is not None:
+                            print(f"  └─ RSSI: {rssi} dBm")
+                else:
+                    print(f"\n  {node_id}")
+                    print(f"  └─ Status: Not found in database")
+        
+        # Show countdown
+        elapsed = time.time() - self.last_send_time
+        remaining = max(0, int(self.auto_send_interval - elapsed))
+        print(f"\n⏱️  Next send in: {remaining} seconds")
+        print("\n💡 Press (M) for Menu | Ctrl+C to Exit")
+        print("=" * 60)
             
     def clear_screen(self):
         """Clear terminal screen"""
@@ -854,6 +970,12 @@ def main():
         print("\n✅ Running in auto-send mode...")
         print("Press (M) then Enter to enter menu, or Ctrl+C to exit")
         terminal.logger.info("Running in auto-send background mode")
+        
+        # Send immediately on startup
+        print("\n📤 Sending initial telemetry...")
+        terminal.send_telemetry()
+        time.sleep(2)
+        
         try:
             while True:
                 # Check for 'M' key press with timeout
