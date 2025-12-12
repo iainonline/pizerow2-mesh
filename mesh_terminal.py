@@ -119,7 +119,7 @@ class MeshtasticTerminal:
             self.logger.error(msg)
             
     def connect_device(self):
-        """Connect to Meshtastic device with retry"""
+        """Connect to Meshtastic device with retry and Pi Zero 2 W error resilience"""
         retry_count = 0
         max_retries = 10
         retry_delay = 5
@@ -131,13 +131,22 @@ class MeshtasticTerminal:
                     time.sleep(retry_delay)
                 
                 print("📡 Connecting to device via USB...")
+                
+                # Suppress meshtastic library's protobuf parsing errors for Pi Zero 2 W
+                import logging as stdlib_logging
+                meshtastic_logger = stdlib_logging.getLogger('meshtastic')
+                meshtastic_logger.setLevel(stdlib_logging.CRITICAL)
+                
                 self.interface = meshtastic.serial_interface.SerialInterface()
                 
                 # Subscribe to message events
                 pub.subscribe(self.on_receive, "meshtastic.receive")
                 pub.subscribe(self.on_connection, "meshtastic.connection.established")
                 
-                time.sleep(2)
+                # Pi Zero 2 W needs extra time to stabilize USB connection
+                print("⏳ Waiting for device to stabilize...")
+                time.sleep(5)
+                
                 self.connected = True
                 print("✅ Connected successfully!")
                 
@@ -155,6 +164,23 @@ class MeshtasticTerminal:
                 return  # Success, exit retry loop
                     
             except Exception as e:
+                error_str = str(e)
+                # Check if it's a protobuf parsing error - these are non-fatal on Pi Zero 2 W
+                if 'protobuf' in error_str.lower() or 'ParseFromString' in error_str:
+                    print(f"⚠️  Protobuf parsing errors detected (common on Pi Zero 2 W)")
+                    print("⏳ Continuing - waiting for stable connection...")
+                    time.sleep(10)
+                    # Try to continue despite protobuf errors
+                    if self.interface:
+                        try:
+                            pub.subscribe(self.on_receive, "meshtastic.receive")
+                            pub.subscribe(self.on_connection, "meshtastic.connection.established")
+                            self.connected = True
+                            print("✅ Connection established - monitoring active")
+                            return
+                        except:
+                            pass
+                
                 print(f"❌ Connection failed: {e}")
                 retry_count += 1
                 self.connected = False

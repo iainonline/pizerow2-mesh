@@ -64,7 +64,11 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 ### Quick Install on Raspberry Pi Zero 2 W
 
 ```bash
-# 1. Clone the repository
+# 0. Install git if not present
+sudo apt-get update
+sudo apt-get install -y git
+
+# 1. Clone the repository (using HTTPS - no SSH keys needed)
 cd ~
 git clone https://github.com/iainonline/pizerow2-mesh.git Meshtastic
 cd Meshtastic
