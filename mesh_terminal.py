@@ -704,9 +704,9 @@ class MeshtasticTerminal:
         
         # Build message panel for right side (40 chars wide)
         message_lines = []
-        message_lines.append("┌──────────────────────────────────────┐")
-        message_lines.append("│ 💬 RECENT MESSAGES (Last 10)         │")
-        message_lines.append("├──────────────────────────────────────┤")
+        message_lines.append("")
+        message_lines.append("💬 RECENT MESSAGES (Last 10):")
+        message_lines.append("-" * 40)
         
         if self.recent_messages:
             for msg in self.recent_messages[-10:]:  # Last 10 messages
@@ -728,34 +728,28 @@ class MeshtasticTerminal:
                 if signal_info:
                     header += f" {signal_info}"
                 
-                # Truncate header to fit
-                if len(header) > 36:
-                    header = header[:33] + "..."
-                
-                message_lines.append(f"│ {header:<36s} │")
+                message_lines.append(f"   {header}")
                 
                 # Message text - wrap if needed
-                max_text_width = 36
+                max_text_width = 37
                 if len(text) <= max_text_width:
-                    message_lines.append(f"│   {text:<34s} │")
+                    message_lines.append(f"      {text}")
                 else:
                     # Split long messages
                     words = text.split()
-                    line = "  "
+                    line = "      "
                     for word in words:
-                        if len(line) + len(word) + 1 <= max_text_width:
+                        if len(line) + len(word) + 1 <= max_text_width + 6:
                             line += word + " "
                         else:
-                            message_lines.append(f"│ {line:<36s} │")
-                            line = "  " + word + " "
+                            message_lines.append(line)
+                            line = "      " + word + " "
                     if line.strip():
-                        message_lines.append(f"│ {line:<36s} │")
+                        message_lines.append(line)
                 
-                message_lines.append("│" + "─" * 38 + "│")
+                message_lines.append("")
         else:
-            message_lines.append("│ No messages yet                      │")
-        
-        message_lines.append("└──────────────────────────────────────┘")
+            message_lines.append("   No messages yet")
         
         # Show all connected nodes with signal strength
         left_content = []
