@@ -426,6 +426,26 @@ class MeshtasticTerminal:
         
         return " | ".join(lines)
         
+    def request_fresh_telemetry(self):
+        """Request device to read sensors and update telemetry"""
+        try:
+            if self.interface and hasattr(self.interface, 'sendTelemetry'):
+                # Request device to send telemetry (triggers sensor read)
+                self.logger.debug("Requesting fresh telemetry from device")
+                self.interface.sendTelemetry()
+                
+                # Wait for device to read sensors and update
+                time.sleep(3)
+                
+                # Fetch updated data from nodes database
+                current = self.get_current_device_telemetry()
+                if current:
+                    self.logger.debug(f"Fresh telemetry received: Temp={current.get('temperature')}, Hum={current.get('humidity')}, Batt={current.get('battery')}")
+                    return True
+        except Exception as e:
+            self.logger.debug(f"Error requesting fresh telemetry: {e}")
+        return False
+    
     def send_telemetry(self):
         """Send telemetry to selected nodes"""
         if not self.connected or not self.interface:
@@ -441,6 +461,9 @@ class MeshtasticTerminal:
             return False
         
         try:
+            # Request fresh sensor reading from device
+            self.request_fresh_telemetry()
+            
             sent_count = 0
             for node_id in self.selected_nodes:
                 message = self.get_telemetry_message(dest_node_id=node_id)
