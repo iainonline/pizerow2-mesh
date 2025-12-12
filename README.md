@@ -1,4 +1,4 @@
-# Meshtastic Terminal Monitor v1.6
+# Meshtastic Terminal Monitor v1.7
 
 A lightweight terminal-based monitoring application with AI ChatBot for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi 5/4/3. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and interact with an intelligent AI assistant over the mesh.
 

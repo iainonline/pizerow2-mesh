@@ -1,3 +1,34 @@
+# Meshtastic Terminal Monitor - Release Notes
+
+## v1.7 (December 12, 2025)
+
+### 🐛 Bug Fixes
+- **Fixed ChatBot Timeout**: Replaced signal-based timeout with thread-safe timeout mechanism
+  - Resolved "signal only works in main thread" error
+  - ChatBot now properly responds to messages in background threads
+- **Improved Error Logging**: Enhanced telemetry error messages to show actual exception details
+  - Changed from generic "get" error to detailed exception type and message
+  - Better debugging information for troubleshooting
+
+### 🔧 Improvements
+- **Simplified Channel Filtering**: Removed LongFast (channel 0) filter
+  - ChatBot now responds on all channels
+  - Only responds to selected nodes (configured in terminal_config.json)
+  - Prevents unwanted spam while allowing flexibility
+- **Thread-Safe Timeout**: Implemented threading-based timeout for LLM generation
+  - Works correctly in callback threads
+  - Prevents indefinite hangs during response generation
+  - Returns friendly timeout message after 30 seconds
+
+### 📝 Configuration
+- ChatBot now exclusively responds to nodes in `selected_nodes` list
+- All other nodes are silently ignored
+- No rate limiting needed for non-selected nodes
+
+---
+
+## v1.6 (Previous Release)
+
 # Meshtastic Monitor Dashboard v2.0.0
 
 ## Release Summary

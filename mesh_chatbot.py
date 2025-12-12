@@ -7,6 +7,7 @@ import logging
 import os
 from typing import Optional
 import time
+import threading
 
 # Try importing llama-cpp-python (primary choice)
 try:
@@ -19,6 +20,49 @@ except ImportError:
         BACKEND = "ctransformers"
     except ImportError:
         BACKEND = None
+
+
+
+
+class TimeoutException(Exception):
+    """Exception raised when operation times out"""
+    pass
+
+
+def run_with_timeout(func, args=(), kwargs={}, timeout_duration=30):
+    """
+    Run a function with a timeout using threading
+    
+    Args:
+        func: Function to run
+        args: Positional arguments for the function
+        kwargs: Keyword arguments for the function
+        timeout_duration: Timeout in seconds
+        
+    Returns:
+        Result of the function or raises TimeoutException
+    """
+    result = [TimeoutException("Operation timed out")]
+    
+    def target():
+        try:
+            result[0] = func(*args, **kwargs)
+        except Exception as e:
+            result[0] = e
+    
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_duration)
+    
+    if thread.is_alive():
+        # Thread is still running, timeout occurred
+        raise TimeoutException(f"Operation timed out after {timeout_duration} seconds")
+    
+    if isinstance(result[0], Exception):
+        raise result[0]
+    
+    return result[0]
 
 
 class MeshChatBot:
@@ -182,24 +226,32 @@ class MeshChatBot:
             # Format prompt
             prompt = self._format_prompt(message)
             
-            # Generate response
-            if self.backend == "llama-cpp-python":
-                output = self.model(
-                    prompt,
-                    max_tokens=250,  # ~1000 chars = ~250 tokens
-                    temperature=self.temperature,
-                    stop=["</s>", "<|user|>", "<|system|>"],  # Stop tokens
-                    echo=False
-                )
-                response = output['choices'][0]['text'].strip()
-                
-            elif self.backend == "ctransformers":
-                response = self.model(
-                    prompt,
-                    max_new_tokens=250,
-                    temperature=self.temperature,
-                    stop=["</s>", "<|user|>", "<|system|>"]
-                ).strip()
+            # Define generation function
+            def generate():
+                if self.backend == "llama-cpp-python":
+                    output = self.model(
+                        prompt,
+                        max_tokens=250,  # ~1000 chars = ~250 tokens
+                        temperature=self.temperature,
+                        stop=["</s>", "<|user|>", "<|system|>"],  # Stop tokens
+                        echo=False
+                    )
+                    return output['choices'][0]['text'].strip()
+                    
+                elif self.backend == "ctransformers":
+                    return self.model(
+                        prompt,
+                        max_new_tokens=250,
+                        temperature=self.temperature,
+                        stop=["</s>", "<|user|>", "<|system|>"]
+                    ).strip()
+            
+            # Generate response with timeout enforcement
+            try:
+                response = run_with_timeout(generate, timeout_duration=timeout)
+            except TimeoutException as te:
+                self.logger.error(f"Generation timeout: {te}")
+                return "⚠️ Response timeout. Please try a simpler question."
             
             # Hard limit at 1000 characters total
             if len(response) > 1000:

@@ -397,26 +397,26 @@ class MeshtasticTerminal:
             elif portnum == 'TEXT_MESSAGE_APP':
                 self.stats['messages_seen'] += 1
                 text = decoded.get('text', '')
-                self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
+                channel = packet.get('channel', 0)
+                
+                self.logger.info(f"TEXT_MSG from {from_id} (ch {channel}): {text[:50]}")
                 
                 # Check if this is a keyword command
                 text_upper = text.strip().upper()
                 keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
                 is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
                 
-                # Process keyword commands (only from selected nodes)
-                if is_keyword and from_id in self.selected_nodes:
+                # Only process messages from selected nodes
+                if from_id not in self.selected_nodes:
+                    self.logger.debug(f"Ignoring message from non-selected node {from_id}")
+                    return
+                
+                # Process keyword commands
+                if is_keyword:
                     self.process_keyword_command(text_upper, from_id)
                 
-                # Process chatbot messages (from ALL nodes, with rate limiting for non-selected)
+                # Process chatbot messages
                 elif not is_keyword and self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
-                    # Check rate limit for non-selected nodes
-                    if from_id not in self.selected_nodes:
-                        if not self.check_rate_limit(from_id):
-                            self.logger.warning(f"Rate limit exceeded for {from_id}")
-                            # Send rate limit notification
-                            self.interface.sendText("⚠️ Rate limit: 50 msg/hour. Please wait.", destinationId=from_id, wantAck=False)
-                            return
                     
                     # Pass message to chatbot
                     self.logger.info(f"Passing message to chatbot: {text[:50]}")
@@ -773,7 +773,7 @@ class MeshtasticTerminal:
                         if telemetry:
                             return telemetry
         except Exception as e:
-            self.logger.debug(f"Error getting current device telemetry: {e}")
+            self.logger.debug(f"Error getting current device telemetry: {type(e).__name__}: {str(e)}")
         return None
     
     def split_message(self, text: str, max_length: int = 200) -> List[str]:
