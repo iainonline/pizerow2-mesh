@@ -1,6 +1,6 @@
-# Meshtastic Terminal Monitor v1.0
+# Meshtastic Terminal Monitor v1.1
 
-A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and view text messages in real-time.
+A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and view text messages in real-time with a two-column dashboard layout.
 
 ![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-red?style=flat-square&logo=raspberry-pi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
@@ -10,9 +10,10 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 ## Features
 
 ### 📊 Real-Time Dashboard
+- **Two-Column Layout**: Main content on left, message panel on right
 - **Active Mesh Network**: Top 5 most recently heard nodes (last 30 minutes)
 - **Signal Metrics**: Live SNR and RSSI for each active node
-- **Text Message Feed**: Last 10 received messages with sender details and signal strength
+- **Text Message Panel**: Boxed display with last 10 messages, timestamps, sender details, and signal strength
 - **Real-Time Activity Feed**: Last 20 packets in/out with timestamps
 - **Device Telemetry**: Battery level, voltage, channel utilization, air utilization
 - **Environment Sensors**: Fresh temperature, humidity, barometric pressure readings
@@ -27,10 +28,10 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 - **Node Selection**: Choose specific nodes to receive encrypted direct messages
 - **Live Status Display**: Updates every 10 seconds showing:
   - Top 5 active mesh nodes with signal strength
+  - Text message panel (boxed, top right) with last 10 messages
   - Local sensor data (temperature, humidity, pressure)
   - Device status (battery, voltage)
   - Target node information (name, last heard, signal strength)
-  - Text message feed (last 10 messages with sender and signal data)
   - Recent activity feed (last 20 packets)
   - Countdown to next send
 - **Configuration Persistence**: Settings saved across sessions

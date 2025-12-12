@@ -596,9 +596,65 @@ class MeshtasticTerminal:
         self.print_header()
         
         print("🔄 AUTO-SEND MODE ACTIVE")
-        print("=" * 60)
+        print("=" * 120)
+        
+        # Build message panel for right side (40 chars wide)
+        message_lines = []
+        message_lines.append("┌──────────────────────────────────────┐")
+        message_lines.append("│ 💬 RECENT MESSAGES (Last 10)         │")
+        message_lines.append("├──────────────────────────────────────┤")
+        
+        if self.recent_messages:
+            for msg in self.recent_messages[-10:]:  # Last 10 messages
+                timestamp = msg['time']
+                from_name = msg['from_name'][:8]  # Truncate name
+                text = msg['text']
+                
+                # Message header line with signal
+                signal_info = ""
+                if msg['snr'] is not None:
+                    signal_info = f"SNR:{msg['snr']:.1f}"
+                if msg['rssi'] is not None:
+                    if signal_info:
+                        signal_info += f",{msg['rssi']}dBm"
+                    else:
+                        signal_info = f"{msg['rssi']}dBm"
+                
+                header = f"[{timestamp}] {from_name}"
+                if signal_info:
+                    header += f" {signal_info}"
+                
+                # Truncate header to fit
+                if len(header) > 36:
+                    header = header[:33] + "..."
+                
+                message_lines.append(f"│ {header:<36s} │")
+                
+                # Message text - wrap if needed
+                max_text_width = 36
+                if len(text) <= max_text_width:
+                    message_lines.append(f"│   {text:<34s} │")
+                else:
+                    # Split long messages
+                    words = text.split()
+                    line = "  "
+                    for word in words:
+                        if len(line) + len(word) + 1 <= max_text_width:
+                            line += word + " "
+                        else:
+                            message_lines.append(f"│ {line:<36s} │")
+                            line = "  " + word + " "
+                    if line.strip():
+                        message_lines.append(f"│ {line:<36s} │")
+                
+                message_lines.append("│" + "─" * 38 + "│")
+        else:
+            message_lines.append("│ No messages yet                      │")
+        
+        message_lines.append("└──────────────────────────────────────┘")
         
         # Show all connected nodes with signal strength
+        left_content = []
         if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
             # Filter nodes heard in last 30 minutes
             recent_cutoff = time.time() - 1800  # 30 minutes
@@ -612,10 +668,10 @@ class MeshtasticTerminal:
             # Sort by last heard (most recent first)
             recent_nodes.sort(reverse=True)
             
-            print(f"\n📡 MESH NETWORK - ACTIVE NODES (Last 30min): {len(recent_nodes)}")
-            print("=" * 60)
-            print(f"{'Node':6s} {'Age':>6s}  {'SNR':>10s}  {'RSSI':>10s}")
-            print("-" * 60)
+            left_content.append(f"\n📡 MESH NETWORK - ACTIVE NODES (Last 30min): {len(recent_nodes)}")
+            left_content.append("=" * 75)
+            left_content.append(f"{'Node':6s} {'Age':>6s}  {'SNR':>10s}  {'RSSI':>10s}")
+            left_content.append("-" * 75)
             
             # Show top 5 most recently seen nodes
             for last_heard, node_id, node in recent_nodes[:5]:
@@ -641,9 +697,9 @@ class MeshtasticTerminal:
                 # Build display line with proper spacing
                 snr_str = f"{snr:.1f}dB" if snr is not None else "-"
                 rssi_str = f"{rssi}dBm" if rssi is not None else "-"
-                print(f"{short_name:6s} {age_str:>6s}  {snr_str:>10s}  {rssi_str:>10s}")
+                left_content.append(f"{short_name:6s} {age_str:>6s}  {snr_str:>10s}  {rssi_str:>10s}")
             
-            print("=" * 60)
+            left_content.append("=" * 75)
         
         # Get current device telemetry from interface.nodes
         current_telemetry = self.get_current_device_telemetry()
@@ -659,34 +715,34 @@ class MeshtasticTerminal:
             pressure = current_telemetry.get('pressure')
             
             if temp is not None or humidity is not None or pressure is not None:
-                print("\n🌡️  LOCAL SENSOR DATA:")
+                left_content.append("\n🌡️  LOCAL SENSOR DATA:")
                 if temp is not None:
                     temp_f = (temp * 9/5) + 32
-                    print(f"   Temperature: {temp_f:.1f}°F ({temp:.1f}°C)")
+                    left_content.append(f"   Temperature: {temp_f:.1f}°F ({temp:.1f}°C)")
                 if humidity is not None:
-                    print(f"   Humidity: {humidity:.1f}%")
+                    left_content.append(f"   Humidity: {humidity:.1f}%")
                 if pressure is not None:
-                    print(f"   Pressure: {pressure:.1f} hPa")
+                    left_content.append(f"   Pressure: {pressure:.1f} hPa")
             
             # Device metrics
             battery = current_telemetry.get('battery')
             voltage = current_telemetry.get('voltage')
             if battery is not None or voltage is not None:
-                print("\n🔋 DEVICE STATUS:")
+                left_content.append("\n🔋 DEVICE STATUS:")
                 if battery is not None:
                     if battery == 101:
-                        print("   Power: USB/Solar")
+                        left_content.append("   Power: USB/Solar")
                     else:
-                        print(f"   Battery: {battery}%")
+                        left_content.append(f"   Battery: {battery}%")
                 if voltage is not None:
-                    print(f"   Voltage: {voltage:.2f}V")
+                    left_content.append(f"   Voltage: {voltage:.2f}V")
         else:
-            print("\n⚠️  No telemetry data available yet")
+            left_content.append("\n⚠️  No telemetry data available yet")
         
         # Show target nodes
         if self.selected_nodes:
-            print(f"\n📡 TARGET NODES ({len(self.selected_nodes)}):")
-            print("-" * 60)
+            left_content.append(f"\n📡 TARGET NODES ({len(self.selected_nodes)}):")
+            left_content.append("-" * 75)
             
             for node_id in self.selected_nodes:
                 node_info = self.get_node_info(node_id)
@@ -711,51 +767,42 @@ class MeshtasticTerminal:
                     rssi = node_info.get('deviceMetrics', {}).get('airUtilTx', 0)  # Try device metrics
                     
                     # Display node info
-                    print(f"\n  {name} ({node_id})")
-                    print(f"  └─ Last heard: {age_str}")
+                    left_content.append(f"\n  {name} ({node_id})")
+                    left_content.append(f"  └─ Last heard: {age_str}")
                     
                     # Show signal if we have recent data
                     if node_id in self.nodes_data and 'last_snr' in self.nodes_data[node_id]:
                         snr = self.nodes_data[node_id].get('last_snr')
                         rssi = self.nodes_data[node_id].get('last_rssi')
                         if snr is not None:
-                            print(f"  └─ SNR: {snr:.1f} dB")
+                            left_content.append(f"  └─ SNR: {snr:.1f} dB")
                         if rssi is not None:
-                            print(f"  └─ RSSI: {rssi} dBm")
+                            left_content.append(f"  └─ RSSI: {rssi} dBm")
                 else:
-                    print(f"\n  {node_id}")
-                    print(f"  └─ Status: Not found in database")
+                    left_content.append(f"\n  {node_id}")
+                    left_content.append(f"  └─ Status: Not found in database")
         
         # Show recent activity
         if self.recent_activity:
-            print(f"\n📊 RECENT ACTIVITY (Last 20):")
-            print("-" * 60)
+            left_content.append(f"\n📊 RECENT ACTIVITY (Last 20):")
+            left_content.append("-" * 75)
             # Show all items (continuous scroll)
             for activity in self.recent_activity:
-                print(f"   {activity}")
+                left_content.append(f"   {activity}")
         
-        # Show recent text messages
-        if self.recent_messages:
-            print(f"\n💬 RECENT MESSAGES (Last 10):")
-            print("-" * 60)
-            for msg in self.recent_messages:
-                timestamp = msg['time']
-                from_name = msg['from_name']
-                text = msg['text'][:50] + '...' if len(msg['text']) > 50 else msg['text']
-                signal_info = ""
-                if msg['snr'] is not None:
-                    signal_info += f" SNR:{msg['snr']:.1f}dB"
-                if msg['rssi'] is not None:
-                    signal_info += f" RSSI:{msg['rssi']}dBm"
-                print(f"   [{timestamp}] {from_name}:{signal_info}")
-                print(f"      {text}")
+        # Print left content alongside message panel
+        max_lines = max(len(left_content), len(message_lines))
+        for i in range(max_lines):
+            left_line = left_content[i] if i < len(left_content) else ""
+            right_line = message_lines[i] if i < len(message_lines) else " " * 40
+            print(f"{left_line:<75s}  {right_line}")
         
         # Show countdown
         elapsed = time.time() - self.last_send_time
         remaining = max(0, int(self.auto_send_interval - elapsed))
         print(f"\n⏱️  Next send in: {remaining} seconds")
         print("\n💡 Press (M) for Menu | Ctrl+C to Exit")
-        print("=" * 60)
+        print("=" * 120)
             
     def clear_screen(self):
         """Clear terminal screen"""
