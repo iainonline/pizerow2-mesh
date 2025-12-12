@@ -185,7 +185,7 @@ class MeshChatBot:
             if self.backend == "llama-cpp-python":
                 output = self.model(
                     prompt,
-                    max_tokens=100,  # Keep responses short
+                    max_tokens=150,  # Allow longer responses (will be split by caller)
                     temperature=self.temperature,
                     stop=["</s>", "<|", "\n\n"],  # Stop tokens
                     echo=False
@@ -195,17 +195,16 @@ class MeshChatBot:
             elif self.backend == "ctransformers":
                 response = self.model(
                     prompt,
-                    max_new_tokens=100,
+                    max_new_tokens=150,
                     temperature=self.temperature,
                     stop=["</s>", "<|", "\n\n"]
                 ).strip()
             
-            # Truncate to Meshtastic limit
-            if len(response) > self.max_response_length:
-                response = response[:self.max_response_length-3] + "..."
+            # Note: Responses longer than 200 chars will be split into multiple
+            # messages by the caller (mesh_terminal.py)
             
             gen_time = time.time() - start_time
-            self.logger.info(f"Generated response in {gen_time:.1f}s: {response[:50]}...")
+            self.logger.info(f"Generated response in {gen_time:.1f}s ({len(response)} chars): {response[:50]}...")
             
             return response
             

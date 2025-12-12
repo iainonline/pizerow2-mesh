@@ -402,20 +402,29 @@ class MeshtasticTerminal:
                         try:
                             response = self.chatbot.generate_response(text)
                             if response:
-                                self.interface.sendText(response, destinationId=from_id, wantAck=False)
-                                self.logger.info(f"ChatBot response sent: {response[:50]}")
-                                self.add_activity(f"🤖 Replied to {from_id[:8]}")
+                                # Split long responses into multiple messages (200 char limit)
+                                chunks = self.split_message(response, max_length=200)
                                 
-                                # Store sent message in conversation
-                                if from_id not in self.conversations:
-                                    self.conversations[from_id] = []
-                                self.conversations[from_id].append({
-                                    'time': datetime.now().strftime('%H:%M:%S'),
-                                    'from': 'local',
-                                    'to': from_id,
-                                    'text': response,
-                                    'direction': 'sent'
-                                })
+                                for i, chunk in enumerate(chunks):
+                                    self.interface.sendText(chunk, destinationId=from_id, wantAck=False)
+                                    self.logger.info(f"ChatBot response part {i+1}/{len(chunks)} sent: {chunk[:50]}")
+                                    
+                                    # Store each sent message in conversation
+                                    if from_id not in self.conversations:
+                                        self.conversations[from_id] = []
+                                    self.conversations[from_id].append({
+                                        'time': datetime.now().strftime('%H:%M:%S'),
+                                        'from': 'local',
+                                        'to': from_id,
+                                        'text': chunk,
+                                        'direction': 'sent'
+                                    })
+                                    
+                                    # Small delay between messages
+                                    if i < len(chunks) - 1:
+                                        time.sleep(1)
+                                
+                                self.add_activity(f"🤖 Replied to {from_id[:8]} ({len(chunks)} msg)")
                             else:
                                 self.logger.warning("ChatBot generated no response")
                         except Exception as e:
@@ -700,6 +709,51 @@ class MeshtasticTerminal:
         except Exception as e:
             self.logger.debug(f"Error getting current device telemetry: {e}")
         return None
+    
+    def split_message(self, text: str, max_length: int = 200) -> List[str]:
+        """
+        Split a long message into chunks suitable for Meshtastic transmission.
+        Tries to split at sentence boundaries when possible.
+        
+        Args:
+            text: The text to split
+            max_length: Maximum length per chunk (default 200 for Meshtastic)
+            
+        Returns:
+            List of message chunks
+        """
+        if len(text) <= max_length:
+            return [text]
+        
+        chunks = []
+        remaining = text
+        
+        while remaining:
+            if len(remaining) <= max_length:
+                chunks.append(remaining)
+                break
+            
+            # Try to find a sentence boundary within max_length
+            chunk = remaining[:max_length]
+            
+            # Look for sentence endings (. ! ?)
+            last_period = max(chunk.rfind('. '), chunk.rfind('! '), chunk.rfind('? '))
+            
+            if last_period > max_length * 0.5:  # Only split at sentence if it's past halfway
+                split_point = last_period + 2  # Include the period and space
+            else:
+                # Try to split at a space
+                last_space = chunk.rfind(' ')
+                if last_space > 0:
+                    split_point = last_space + 1
+                else:
+                    # Hard split at max_length
+                    split_point = max_length
+            
+            chunks.append(remaining[:split_point].strip())
+            remaining = remaining[split_point:].strip()
+        
+        return chunks
     
     def add_activity(self, message: str):
         """Add recent activity message with timestamp"""
