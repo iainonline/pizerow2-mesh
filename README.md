@@ -9,22 +9,27 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 
 ## Features
 
-### 📊 Real-Time Monitoring
+### 📊 Real-Time Dashboard
+- **Active Mesh Network**: Top 5 most recently heard nodes (last 30 minutes)
+- **Signal Metrics**: Live SNR and RSSI for each active node
+- **Real-Time Activity Feed**: Last 20 packets in/out with timestamps
 - **Device Telemetry**: Battery level, voltage, channel utilization, air utilization
-- **Environment Sensors**: Temperature, humidity, barometric pressure (BME280 when available)
-- **Signal Strength**: SNR and RSSI tracking per node
+- **Environment Sensors**: Fresh temperature, humidity, barometric pressure readings
 - **Network Statistics**: Total nodes, packet RX/TX counts
-- **NoT Indicator**: Clear "No Telemetry" flag when sensor data is unavailable
-- **Comprehensive Logging**: All activity logged to file for debugging
+- **Dedicated Activity Log**: mesh_activity.log for detailed analysis
 
 ### 🚀 Auto-Send Telemetry
+- **Fresh Sensor Readings**: Triggers BME280 reading before each send
+- **Real-Time Data**: Temperature/humidity/pressure in every message (not 30-min intervals)
 - **Immediate Send**: Sends telemetry immediately on startup
 - **Scheduled Reporting**: Automatically send telemetry at configurable intervals (minimum 30 seconds)
 - **Node Selection**: Choose specific nodes to receive encrypted direct messages
 - **Live Status Display**: Updates every 10 seconds showing:
+  - Top 5 active mesh nodes with signal strength
   - Local sensor data (temperature, humidity, pressure)
   - Device status (battery, voltage)
   - Target node information (name, last heard, signal strength)
+  - Recent activity feed (last 20 packets)
   - Countdown to next send
 - **Configuration Persistence**: Settings saved across sessions
 
@@ -34,18 +39,20 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 - **No Manual Keys**: Key exchange happens automatically
 
 ### 💻 Terminal Interface
+- **Dashboard Layout**: Active nodes at top, activity feed below
 - **Numbered Menu Navigation**: Simple 1-5 option menus
 - **Auto-Start Mode**: 10-second countdown with X key to cancel
 - **Background Operation**: M key to access menu anytime
 - **Graceful Shutdown**: Ctrl+C for clean exit
 - **Headless Optimized**: No GUI dependencies, perfect for SSH access
+- **Automatic Port Clearing**: Resolves USB port lock issues automatically
 
 ## Hardware Requirements
 
 ### Raspberry Pi
-- **Raspberry Pi Zero 2 W** (primary target - tested and optimized)
-- Raspberry Pi 5/4/3/Zero W (compatible)
+- **Raspberry Pi 5/4/3** (recommended - tested and fully working)
 - **USB Port**: For serial connection to Meshtastic device
+- Raspberry Pi Zero 2 W (limited - USB compatibility issues with Meshtastic Python library)
 
 ### Meshtastic Device
 - **Heltec WiFi LoRa 32 V3** (tested)
@@ -191,19 +198,28 @@ Messages are sent as **encrypted Direct Messages (DMs)** to selected nodes:
 - Key exchange happens automatically - no manual setup needed
 - Check **DM tab** on recipient devices to see messages
 
-### Viewing Sent Messages
+### Viewing Sent Messages and Activity
 
-Check the log file for detailed activity:
+**Main Debug Log** (`mesh_terminal.log`):
 ```bash
 tail -f mesh_terminal.log
 ```
-
-Log shows:
-- Connection status
-- All packet RX/TX
+Shows:
+- Connection status and errors
+- All packet RX/TX details
 - Telemetry sends with full message content
 - Node discoveries with signal strength
-- Any errors with stack traces
+- Debug information and stack traces
+
+**Activity Log** (`mesh_activity.log`):
+```bash
+tail -f mesh_activity.log
+```
+Shows clean timestamped activity feed:
+- `📥 TELEMETRY from Yang SNR:6.2` (incoming packets)
+- `📤 Telemetry to Yang` (outgoing messages)
+- Perfect for analyzing mesh traffic patterns
+- Last 20 items also displayed on screen
 
 ## Configuration Files
 
@@ -447,28 +463,28 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v3.0.1 (Current - Terminal Edition)
-- **Automatic USB port lock clearing** - Fixes "Resource temporarily unavailable" errors
-- **Reliable connection recovery** - Clears stale locks before every connection attempt
-- **Enhanced stability** - No manual intervention needed for port lock issues
+### v3.1.0 (Current - Dashboard Edition)
+- **Dashboard Layout** - Active nodes at top, scrolling activity below
+- **Live Mesh Network View** - Top 5 most recently heard nodes (last 30 minutes)
+- **Real-Time Activity Feed** - Last 20 packets with timestamps in continuous scroll
+- **Dedicated Activity Log** - mesh_activity.log for traffic analysis
+- **Fresh Sensor Readings** - Triggers BME280 reading before each send
+- **Real-Time Telemetry** - Temp/humidity/pressure every minute (not 30-min intervals)
+- **Signal Metrics** - Live SNR and RSSI for all active nodes
+- **Automatic USB Port Lock Clearing** - Fixes "Resource temporarily unavailable" errors
+- **Enhanced Stability** - No manual intervention needed for port locks
 
 ### v3.0.0 (Terminal Edition)
 - **Terminal-based interface** - No GUI dependencies, perfect for headless operation
-- **Raspberry Pi Zero 2 W optimized** - Lightweight and SSH-friendly
-- **Enhanced auto-send display** - Live updates every 10 seconds with:
-  - Local sensor data (BME280 temperature, humidity, pressure)
-  - Device status (battery, voltage)
-  - Target node information (name, last heard, signal strength)
-  - Countdown to next send
+- **Enhanced auto-send display** - Live updates every 10 seconds
 - **Immediate send on startup** - No waiting for first telemetry
-- **NoT indicator** - Clear "No Telemetry" flag when sensor data unavailable
-- **Comprehensive logging** - All activity to `mesh_terminal.log` with DEBUG level
+- **Comprehensive logging** - All activity to mesh_terminal.log
 - **M key menu access** - Enter menu anytime during auto-send
 - **X key autostart cancel** - 10-second countdown with option to cancel
 - **Graceful shutdown** - Ctrl+C exits cleanly
 - **Signal strength tracking** - Per-node SNR/RSSI in real-time
 - **PKC Direct Messages** - Automatic encryption (firmware 2.5.0+)
-- **Configuration persistence** - Settings saved to `terminal_config.json`
+- **Configuration persistence** - Settings saved to terminal_config.json
 
 ### v2.0.0 (Legacy - GUI Version)
 - Complete GUI dashboard with real-time monitoring
@@ -486,4 +502,4 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 ---
 
 **Made for the Meshtastic community 📡**
-**Optimized for Raspberry Pi Zero 2 W headless operation**
+**Optimized for Raspberry Pi 5/4/3 with USB connectivity**
