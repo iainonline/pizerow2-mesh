@@ -44,6 +44,10 @@ class MeshtasticTerminal:
         self.recent_activity = []  # List of recent packet activity
         self.max_activity_items = 20  # Keep last 20 items
         
+        # Recent text messages tracking
+        self.recent_messages = []  # List of recent text messages
+        self.max_message_items = 10  # Keep last 10 messages
+        
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
         self.auto_send_enabled = False
@@ -313,6 +317,26 @@ class MeshtasticTerminal:
                 self.stats['messages_seen'] += 1
                 text = decoded.get('text', '')
                 self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
+                
+                # Store the message
+                node_name = from_id
+                node_info = self.get_node_info(from_id)
+                if node_info:
+                    node_name = node_info.get('user', {}).get('shortName') or node_info.get('user', {}).get('longName', from_id)
+                
+                message_entry = {
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'from_id': from_id,
+                    'from_name': node_name,
+                    'text': text,
+                    'snr': snr,
+                    'rssi': rssi
+                }
+                self.recent_messages.append(message_entry)
+                
+                # Keep only last N messages
+                if len(self.recent_messages) > self.max_message_items:
+                    self.recent_messages.pop(0)
                 
         except Exception as e:
             self.logger.error(f"Error in on_receive: {e}")
@@ -709,6 +733,22 @@ class MeshtasticTerminal:
             # Show all items (continuous scroll)
             for activity in self.recent_activity:
                 print(f"   {activity}")
+        
+        # Show recent text messages
+        if self.recent_messages:
+            print(f"\n💬 RECENT MESSAGES (Last 10):")
+            print("-" * 60)
+            for msg in self.recent_messages:
+                timestamp = msg['time']
+                from_name = msg['from_name']
+                text = msg['text'][:50] + '...' if len(msg['text']) > 50 else msg['text']
+                signal_info = ""
+                if msg['snr'] is not None:
+                    signal_info += f" SNR:{msg['snr']:.1f}dB"
+                if msg['rssi'] is not None:
+                    signal_info += f" RSSI:{msg['rssi']}dBm"
+                print(f"   [{timestamp}] {from_name}:{signal_info}")
+                print(f"      {text}")
         
         # Show countdown
         elapsed = time.time() - self.last_send_time

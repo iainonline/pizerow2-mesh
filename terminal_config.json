@@ -1,6 +1,6 @@
 {
   "auto_send_enabled": true,
-  "auto_send_interval": 60,
+  "auto_send_interval": 300,
   "selected_nodes": [
     "!9e757a8c",
     "!9e761374"

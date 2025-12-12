@@ -1,6 +1,6 @@
-# Meshtastic Terminal Monitor
+# Meshtastic Terminal Monitor v1.0
 
-A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, and track mesh network activity.
+A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and view text messages in real-time.
 
 ![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-red?style=flat-square&logo=raspberry-pi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
@@ -12,6 +12,7 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 ### 📊 Real-Time Dashboard
 - **Active Mesh Network**: Top 5 most recently heard nodes (last 30 minutes)
 - **Signal Metrics**: Live SNR and RSSI for each active node
+- **Text Message Feed**: Last 10 received messages with sender details and signal strength
 - **Real-Time Activity Feed**: Last 20 packets in/out with timestamps
 - **Device Telemetry**: Battery level, voltage, channel utilization, air utilization
 - **Environment Sensors**: Fresh temperature, humidity, barometric pressure readings
@@ -29,6 +30,7 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
   - Local sensor data (temperature, humidity, pressure)
   - Device status (battery, voltage)
   - Target node information (name, last heard, signal strength)
+  - Text message feed (last 10 messages with sender and signal data)
   - Recent activity feed (last 20 packets)
   - Countdown to next send
 - **Configuration Persistence**: Settings saved across sessions
