@@ -48,6 +48,9 @@ class MeshtasticTerminal:
         self.recent_messages = []  # List of recent text messages
         self.max_message_items = 10  # Keep last 10 messages
         
+        # Message acknowledgment tracking per target node
+        self.message_acks = {}  # {node_id: {'last_ack_time': timestamp, 'ack_status': 'ACK'/'NAK'/'PENDING'}}
+        
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
         self.auto_send_enabled = False
@@ -337,9 +340,42 @@ class MeshtasticTerminal:
                 # Keep only last N messages
                 if len(self.recent_messages) > self.max_message_items:
                     self.recent_messages.pop(0)
+            elif portnum == 'ROUTING_APP':
+                # Handle ACK/NAK responses
+                self.handle_routing_response(packet)
                 
         except Exception as e:
             self.logger.error(f"Error in on_receive: {e}")
+    
+    def handle_routing_response(self, packet):
+        """Handle routing ACK/NAK responses"""
+        try:
+            decoded = packet.get('decoded', {})
+            routing = decoded.get('routing', {})
+            error_reason = routing.get('errorReason', 'NONE')
+            from_id = packet.get('from')
+            
+            if from_id:
+                from_id = f"!{from_id:08x}"
+                
+                if error_reason == 'NONE':
+                    # ACK received
+                    self.message_acks[from_id] = {
+                        'last_ack_time': time.time(),
+                        'ack_status': 'ACK',
+                        'timestamp': datetime.now().strftime('%H:%M:%S')
+                    }
+                    self.logger.info(f"Received ACK from {from_id}")
+                else:
+                    # NAK received
+                    self.message_acks[from_id] = {
+                        'last_ack_time': time.time(),
+                        'ack_status': f'NAK:{error_reason}',
+                        'timestamp': datetime.now().strftime('%H:%M:%S')
+                    }
+                    self.logger.warning(f"Received NAK from {from_id}: {error_reason}")
+        except Exception as e:
+            self.logger.error(f"Error handling routing response: {e}")
             
     def process_telemetry(self, packet):
         """Process telemetry data"""
@@ -548,6 +584,13 @@ class MeshtasticTerminal:
                         age = time.time() - last_heard
                         age_str = f"{int(age/60)} min ago" if age > 60 else f"{int(age)} sec ago"
                         self.logger.info(f"Sending to {node_id} (last seen {age_str})")
+                
+                # Mark message as pending before sending
+                self.message_acks[node_id] = {
+                    'last_ack_time': time.time(),
+                    'ack_status': 'PENDING',
+                    'timestamp': datetime.now().strftime('%H:%M:%S')
+                }
                 
                 self.interface.sendText(message, destinationId=node_id, wantAck=True)
                 self.stats['packets_tx'] += 1
@@ -778,6 +821,21 @@ class MeshtasticTerminal:
                             left_content.append(f"  └─ SNR: {snr:.1f} dB")
                         if rssi is not None:
                             left_content.append(f"  └─ RSSI: {rssi} dBm")
+                    
+                    # Show message acknowledgment status
+                    if node_id in self.message_acks:
+                        ack_info = self.message_acks[node_id]
+                        status = ack_info['ack_status']
+                        timestamp = ack_info['timestamp']
+                        
+                        if status == 'ACK':
+                            left_content.append(f"  └─ Last msg: ✅ ACK at {timestamp}")
+                        elif status == 'PENDING':
+                            left_content.append(f"  └─ Last msg: ⏳ PENDING since {timestamp}")
+                        elif status.startswith('NAK'):
+                            left_content.append(f"  └─ Last msg: ❌ {status} at {timestamp}")
+                    else:
+                        left_content.append(f"  └─ Last msg: No messages sent yet")
                 else:
                     left_content.append(f"\n  {node_id}")
                     left_content.append(f"  └─ Status: Not found in database")
