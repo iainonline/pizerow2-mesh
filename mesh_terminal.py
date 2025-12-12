@@ -638,11 +638,12 @@ class MeshtasticTerminal:
                 # Add to activity feed
                 node_name = node_info.get('user', {}).get('shortName') if node_info else node_id
                 self.add_activity(f"📤 Telemetry to {node_name}")
+                
+                # Print confirmation with node name
+                print(f"✅ Sent telemetry to {node_name}")
             
             self.last_send_time = time.time()
-            msg = f"Sent telemetry to {sent_count} nodes"
-            print(f"✅ {msg}")
-            self.logger.info(msg)
+            self.logger.info(f"Sent telemetry to {sent_count} nodes")
             self.logger.info("NOTE: Messages use PKC encryption (fw 2.5.0+). Key exchange happens automatically.")
             return True
         except Exception as e:
@@ -1379,6 +1380,9 @@ def main():
     # If auto-started and auto-send is enabled, run with M key to enter menu
     if auto_started and terminal.auto_send_enabled:
         terminal.logger.info("Running in auto-send background mode")
+        
+        # Initialize last_send_time to prevent immediate send from worker
+        terminal.last_send_time = time.time()
         
         # Start auto-send worker thread
         worker_thread = threading.Thread(target=terminal.auto_send_worker, daemon=True)
