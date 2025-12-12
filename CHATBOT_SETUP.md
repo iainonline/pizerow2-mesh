@@ -14,6 +14,7 @@ The chatbot feature adds an optional AI assistant that can respond to messages f
 - ✅ Keywords still work (STOP, START, FREQ, etc.)
 - ✅ Responses limited to 200 characters (Meshtastic compatible)
 - ✅ Can be turned on/off remotely via mesh commands
+- ✅ Customizable greeting message
 - ✅ Fully open source (Apache 2.0 licensed)
 
 ## Requirements
@@ -169,9 +170,26 @@ ChatBot settings are stored in `terminal_config.json`:
   "auto_send_interval": 60,
   "selected_nodes": ["!9e757a8c", "!9e761374"],
   "chatbot_enabled": false,
-  "chatbot_model_path": "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+  "chatbot_model_path": "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+  "chatbot_greeting": "Hello. I am MeshBot. How can I help you?"
 }
 ```
+
+### Customizing the Greeting
+
+You can customize the greeting message that is sent when the chatbot is first enabled:
+
+**Via Configuration File:**
+Edit `terminal_config.json` and change the `chatbot_greeting` field.
+
+**Via Python API:**
+```python
+chatbot.set_greeting("Your custom message here")
+greeting = chatbot.get_greeting()
+```
+
+**Default Greeting:**
+"Hello. I am MeshBot. How can I help you?"
 
 ## Performance
 

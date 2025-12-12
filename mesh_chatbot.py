@@ -42,6 +42,9 @@ class MeshChatBot:
         self.max_response_length = 200  # Meshtastic message limit
         self.backend = BACKEND
         
+        # Greeting message (sent when chatbot is first enabled)
+        self.greeting_message = "Hello. I am MeshBot. How can I help you?"
+        
         # Performance settings for Pi5
         self.n_ctx = 512  # Context window (keep small for speed)
         self.n_threads = 4  # Use 4 cores on Pi5
@@ -60,6 +63,22 @@ class MeshChatBot:
     def model_exists(self) -> bool:
         """Check if model file exists"""
         return os.path.exists(self.model_path)
+    
+    def get_greeting(self) -> str:
+        """Get the current greeting message"""
+        return self.greeting_message
+    
+    def set_greeting(self, greeting: str):
+        """
+        Set a custom greeting message
+        
+        Args:
+            greeting: Custom greeting message (max 200 chars)
+        """
+        if len(greeting) > self.max_response_length:
+            greeting = greeting[:self.max_response_length-3] + "..."
+        self.greeting_message = greeting
+        self.logger.info(f"Greeting message updated: {greeting}")
     
     def load_model(self) -> bool:
         """
@@ -207,7 +226,8 @@ class MeshChatBot:
             'loaded': self.is_loaded(),
             'enabled': self.enabled,
             'model_path': self.model_path,
-            'model_exists': self.model_exists()
+            'model_exists': self.model_exists(),
+            'greeting': self.greeting_message
         }
 
 
@@ -242,6 +262,9 @@ def test_chatbot():
     if chatbot.load_model():
         print("✅ Model loaded successfully")
         
+        # Show greeting message
+        print(f"\n💬 Greeting: {chatbot.get_greeting()}")
+        
         # Test messages
         test_messages = [
             "Hello, how are you?",
@@ -256,6 +279,11 @@ def test_chatbot():
                 print(f"🤖 Bot: {response}")
             else:
                 print("❌ No response generated")
+        
+        # Test custom greeting
+        print("\n\n🔧 Testing custom greeting...")
+        chatbot.set_greeting("Hey there! I'm your mesh network assistant. What do you need?")
+        print(f"💬 New greeting: {chatbot.get_greeting()}")
         
         # Unload
         chatbot.unload_model()
