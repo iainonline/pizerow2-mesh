@@ -70,9 +70,13 @@ class MeshtasticTerminal:
         
         # ChatBot initialization
         self.chatbot = None
-        self.chatbot_enabled = False
+        self.chatbot_enabled = True  # Enabled by default
         self.chatbot_model_path = "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
         self.chatbot_greeting = "Hello. I am MeshBot. How can I help you?"
+        self.chatbot_thinking = False  # Flag to indicate LLM is processing
+        
+        # Rate limiting for non-selected nodes (50 messages per hour)
+        self.rate_limit_tracker = {}  # {node_id: {'count': X, 'reset_time': timestamp}}
         
         # Load config
         self.load_config()
@@ -83,9 +87,19 @@ class MeshtasticTerminal:
             if self.chatbot_greeting:
                 self.chatbot.set_greeting(self.chatbot_greeting)
             self.logger.info(f"ChatBot initialized: available={self.chatbot.is_available()}")
+            
+            # Auto-load model if chatbot is enabled by default
+            if self.chatbot_enabled and self.chatbot.model_exists():
+                self.logger.info("Auto-loading chatbot model on startup...")
+                if self.chatbot.load_model():
+                    self.logger.info("ChatBot model loaded successfully")
+                else:
+                    self.logger.warning("Failed to auto-load chatbot model")
+                    self.chatbot_enabled = False
         except Exception as e:
             self.logger.warning(f"ChatBot initialization failed: {e}")
             self.chatbot = None
+            self.chatbot_enabled = False
         
     def signal_handler(self, signum, frame):
         """Handle Ctrl+C and termination signals gracefully"""
@@ -180,7 +194,7 @@ class MeshtasticTerminal:
                     self.auto_send_enabled = config.get('auto_send_enabled', False)
                     self.auto_send_interval = config.get('auto_send_interval', 60)
                     self.selected_nodes = config.get('selected_nodes', [])
-                    self.chatbot_enabled = config.get('chatbot_enabled', False)
+                    self.chatbot_enabled = config.get('chatbot_enabled', True)  # Default to enabled
                     self.chatbot_model_path = config.get('chatbot_model_path', "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
                     self.chatbot_greeting = config.get('chatbot_greeting', "Hello. I am MeshBot. How can I help you?")
                     msg = f"Loaded config: {len(self.selected_nodes)} nodes selected, auto_send={self.auto_send_enabled}, chatbot={self.chatbot_enabled}"
@@ -385,27 +399,38 @@ class MeshtasticTerminal:
                 text = decoded.get('text', '')
                 self.logger.info(f"TEXT_MSG from {from_id}: {text[:50]}")
                 
-                # Check for keyword commands (only from target nodes)
-                is_keyword = False
-                if from_id in self.selected_nodes:
-                    # Check if this is a keyword command
-                    text_upper = text.strip().upper()
-                    keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
-                    is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
+                # Check if this is a keyword command
+                text_upper = text.strip().upper()
+                keyword_list = ['STOP', 'START', 'RADIOCHECK', 'WEATHERCHECK', 'KEYWORDS', 'CHATBOTON', 'CHATBOTOFF']
+                is_keyword = any(text_upper == kw or text_upper.startswith('FREQ') for kw in keyword_list)
+                
+                # Process keyword commands (only from selected nodes)
+                if is_keyword and from_id in self.selected_nodes:
+                    self.process_keyword_command(text_upper, from_id)
+                
+                # Process chatbot messages (from ALL nodes, with rate limiting for non-selected)
+                elif not is_keyword and self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
+                    # Check rate limit for non-selected nodes
+                    if from_id not in self.selected_nodes:
+                        if not self.check_rate_limit(from_id):
+                            self.logger.warning(f"Rate limit exceeded for {from_id}")
+                            # Send rate limit notification
+                            self.interface.sendText("⚠️ Rate limit: 50 msg/hour. Please wait.", destinationId=from_id, wantAck=False)
+                            return
                     
-                    if is_keyword:
-                        self.process_keyword_command(text_upper, from_id)
-                    elif self.chatbot_enabled and self.chatbot and self.chatbot.is_loaded():
-                        # Pass non-keyword message to chatbot
-                        self.logger.info(f"Passing message to chatbot: {text[:50]}")
-                        print(f"\n🤖 Generating response to message from {from_id[:8]}...")
-                        try:
-                            response = self.chatbot.generate_response(text)
-                            if response:
-                                # Split long responses into multiple messages (200 char limit)
-                                chunks = self.split_message(response, max_length=200)
-                                
-                                for i, chunk in enumerate(chunks):
+                    # Pass message to chatbot
+                    self.logger.info(f"Passing message to chatbot: {text[:50]}")
+                    try:
+                        self.chatbot_thinking = True
+                        response = self.chatbot.generate_response(text)
+                        self.chatbot_thinking = False
+                        if response:
+                            # Split long responses into multiple messages (200 char limit)
+                            chunks = self.split_message(response, max_length=200)
+                            self.logger.info(f"Split response into {len(chunks)} chunks")
+                            
+                            for i, chunk in enumerate(chunks):
+                                try:
                                     self.interface.sendText(chunk, destinationId=from_id, wantAck=False)
                                     self.logger.info(f"ChatBot response part {i+1}/{len(chunks)} sent: {chunk[:50]}")
                                     
@@ -420,15 +445,21 @@ class MeshtasticTerminal:
                                         'direction': 'sent'
                                     })
                                     
-                                    # Small delay between messages
+                                    # Longer delay between messages to avoid interface issues
                                     if i < len(chunks) - 1:
-                                        time.sleep(1)
-                                
-                                self.add_activity(f"🤖 Replied to {from_id[:8]} ({len(chunks)} msg)")
-                            else:
-                                self.logger.warning("ChatBot generated no response")
-                        except Exception as e:
-                            self.logger.error(f"ChatBot error: {e}")
+                                        time.sleep(2)
+                                except Exception as send_error:
+                                    self.logger.error(f"Error sending chunk {i+1}/{len(chunks)}: {send_error}")
+                                    # Continue trying to send remaining chunks
+                                    time.sleep(2)
+                            
+                            self.add_activity(f"🤖 Replied to {from_id[:8]} ({len(chunks)} msg)")
+                        else:
+                            self.chatbot_thinking = False
+                            self.logger.warning("ChatBot generated no response")
+                    except Exception as e:
+                        self.chatbot_thinking = False
+                        self.logger.error(f"ChatBot error: {e}", exc_info=True)
                 
                 # Store the message
                 node_name = from_id
@@ -468,6 +499,43 @@ class MeshtasticTerminal:
                 
         except Exception as e:
             self.logger.error(f"Error in on_receive: {e}")
+    
+    def check_rate_limit(self, node_id):
+        """Check if node is within rate limit (50 messages per hour)
+        
+        Args:
+            node_id: Node ID to check
+            
+        Returns:
+            True if within limit, False if exceeded
+        """
+        current_time = time.time()
+        
+        # Initialize tracker if not exists
+        if node_id not in self.rate_limit_tracker:
+            self.rate_limit_tracker[node_id] = {
+                'count': 0,
+                'reset_time': current_time + 3600  # 1 hour from now
+            }
+        
+        tracker = self.rate_limit_tracker[node_id]
+        
+        # Reset counter if hour has passed
+        if current_time >= tracker['reset_time']:
+            tracker['count'] = 0
+            tracker['reset_time'] = current_time + 3600
+            self.logger.info(f"Rate limit reset for {node_id}")
+        
+        # Check if under limit (50 per hour)
+        if tracker['count'] >= 50:
+            remaining = int(tracker['reset_time'] - current_time)
+            self.logger.warning(f"Rate limit exceeded for {node_id} ({tracker['count']} msgs). Reset in {remaining}s")
+            return False
+        
+        # Increment counter
+        tracker['count'] += 1
+        self.logger.debug(f"Rate limit for {node_id}: {tracker['count']}/50")
+        return True
     
     def process_keyword_command(self, text, from_id):
         """Process keyword commands from target nodes"""
@@ -548,17 +616,16 @@ class MeshtasticTerminal:
                     reply_message = "❌ ChatBot model not found"
                 else:
                     self.logger.info(f"CHATBOTON requested by {from_id}")
-                    print(f"\n🤖 CHATBOTON requested by {from_id}")
                     self.add_activity(f"🤖 CHATBOTON from {from_id}")
                     
                     if self.chatbot_enabled and self.chatbot.is_loaded():
                         reply_message = "⚠️  ChatBot already enabled"
                     else:
-                        print("Loading chatbot model...")
+                        self.add_activity("Loading chatbot model...")
                         if self.chatbot.load_model():
                             self.chatbot_enabled = True
                             self.save_config()
-                            print("✅ ChatBot enabled")
+                            self.add_activity("✅ ChatBot enabled")
                             # Send greeting message
                             greeting = self.chatbot.get_greeting()
                             self.interface.sendText(greeting, destinationId=from_id, wantAck=False)
@@ -572,7 +639,6 @@ class MeshtasticTerminal:
                     reply_message = "❌ ChatBot not available"
                 else:
                     self.logger.info(f"CHATBOTOFF requested by {from_id}")
-                    print(f"\n🤖 CHATBOTOFF requested by {from_id}")
                     self.add_activity(f"🤖 CHATBOTOFF from {from_id}")
                     
                     if not self.chatbot_enabled:
@@ -581,7 +647,7 @@ class MeshtasticTerminal:
                         self.chatbot.unload_model()
                         self.chatbot_enabled = False
                         self.save_config()
-                        print("✅ ChatBot disabled")
+                        self.add_activity("✅ ChatBot disabled")
                         reply_message = "✅ CHATBOT DISABLED"
             
             # Send auto-reply if a response was generated
@@ -860,17 +926,23 @@ class MeshtasticTerminal:
             self.logger.debug(f"Error requesting fresh telemetry: {e}")
         return False
     
-    def send_telemetry(self):
-        """Send telemetry to selected nodes"""
+    def send_telemetry(self, silent=False):
+        """Send telemetry to selected nodes
+        
+        Args:
+            silent: If True, suppress error messages (for background auto-send)
+        """
         if not self.connected or not self.interface:
             msg = "Not connected to device"
-            print(f"❌ {msg}")
+            if not silent:
+                print(f"❌ {msg}")
             self.logger.warning(f"Send failed: {msg}")
             return False
             
         if not self.selected_nodes:
             msg = "No nodes selected"
-            print(f"❌ {msg}")
+            if not silent:
+                print(f"❌ {msg}")
             self.logger.warning(f"Send failed: {msg}")
             return False
         
@@ -903,13 +975,9 @@ class MeshtasticTerminal:
                 sent_count += 1
                 self.logger.info(f"TX to {node_id}: {message}")
                 
-                # Add to activity feed
+                # Add to activity feed (visible at top of screen)
                 node_name = node_info.get('user', {}).get('shortName') if node_info else node_id
                 self.add_activity(f"📤 Telemetry to {node_name}")
-                
-                # Print confirmation with node name (unless output suppressed)
-                if not self.suppress_output:
-                    print(f"✅ Sent telemetry to {node_name}")
             
             self.last_send_time = time.time()
             self.logger.info(f"Sent telemetry to {sent_count} nodes")
@@ -1203,7 +1271,8 @@ class MeshtasticTerminal:
                 elapsed = time.time() - self.last_send_time
                 
                 if elapsed >= self.auto_send_interval:
-                    self.send_telemetry()
+                    # Silent=True to suppress error messages in background thread
+                    self.send_telemetry(silent=True)
             time.sleep(1)
     
     def display_auto_send_status(self):
@@ -1220,7 +1289,10 @@ class MeshtasticTerminal:
         # Show chatbot status
         if self.chatbot and self.chatbot.is_available():
             if self.chatbot_enabled and self.chatbot.is_loaded():
-                print("🤖 ChatBot: ENABLED ✅")
+                if self.chatbot_thinking:
+                    print("🤖 ChatBot: ENABLED ✅ | 💭 Thinking...")
+                else:
+                    print("🤖 ChatBot: ENABLED ✅")
             else:
                 print("🤖 ChatBot: OFF")
         
@@ -1278,7 +1350,7 @@ class MeshtasticTerminal:
         
         # Add sent messages section
         message_lines.append("")
-        message_lines.append("📤 SENT MESSAGES (Last 10):")
+        message_lines.append("📤 SENT MESSAGES (Last 2):")
         message_lines.append("-" * 40)
         
         # Collect sent messages from all conversations
@@ -1292,9 +1364,9 @@ class MeshtasticTerminal:
                         'text': msg['text']
                     })
         
-        # Sort by time and get last 10
+        # Sort by time and get last 2
         sent_msgs.sort(key=lambda x: x['time'])
-        recent_sent = sent_msgs[-10:] if len(sent_msgs) > 10 else sent_msgs
+        recent_sent = sent_msgs[-2:] if len(sent_msgs) > 2 else sent_msgs
         
         if recent_sent:
             for msg in recent_sent:

@@ -1,8 +1,10 @@
 {
   "auto_send_enabled": true,
-  "auto_send_interval": 60,
+  "auto_send_interval": 300,
   "selected_nodes": [
-    "!9e757a8c",
-    "!9e761374"
-  ]
+    "!9e757a8c"
+  ],
+  "chatbot_enabled": true,
+  "chatbot_model_path": "./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+  "chatbot_greeting": "Hello. I am MeshBot. How can I help you?"
 }

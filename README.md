@@ -1,6 +1,6 @@
-# Meshtastic Terminal Monitor v1.3
+# Meshtastic Terminal Monitor v1.4
 
-A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and view text messages in real-time with a two-column dashboard layout.
+A lightweight terminal-based monitoring application with AI ChatBot for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi 5/4/3. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and interact with an intelligent AI assistant over the mesh.
 
 ![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-red?style=flat-square&logo=raspberry-pi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
@@ -8,6 +8,16 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 ## Features
+
+### 🤖 AI ChatBot (NEW in v1.4!)
+- **TinyLlama 1.1B**: Fast, efficient on-device AI running on Raspberry Pi 5
+- **Mesh-Native**: Responds to any text message over the mesh network
+- **Rate Limiting**: 50 messages/hour for non-selected nodes, unlimited for selected nodes
+- **Auto-Enabled**: ChatBot loads automatically on startup
+- **Smart Splitting**: Long responses split into 200-char messages automatically
+- **Live Status**: Dashboard shows "💭 Thinking..." when generating responses
+- **Customizable Greeting**: Set your own welcome message
+- **Commands**: CHATBOTON/CHATBOTOFF from selected nodes only
 
 ### 📊 Real-Time Dashboard
 - **Two-Column Layout**: Main content on left, message panel on right
@@ -67,11 +77,12 @@ A lightweight terminal-based monitoring application for Meshtastic mesh networks
 
 - **Operating System**: Raspberry Pi OS (Bookworm/Bullseye)
 - **Python**: 3.9 or higher
-- **Packages**: meshtastic, pypubsub
+- **Packages**: meshtastic, pypubsub, llama-cpp-python
+- **Disk Space**: ~650MB for TinyLlama model
 
 ## Installation
 
-### Quick Install on Raspberry Pi Zero 2 W
+### Quick Install on Raspberry Pi 5/4/3
 
 ```bash
 # 0. Install git if not present
@@ -89,10 +100,13 @@ python3 -m venv venv
 # 3. Activate virtual environment
 source venv/bin/activate
 
-# 4. Install requirements
+# 4. Install requirements (includes llama-cpp-python for ChatBot)
 pip install -r requirements.txt
 
-# 5. Make start script executable (optional)
+# 5. Download TinyLlama model (required for ChatBot)
+python download_model.py
+
+# 6. Make start script executable (optional)
 chmod +x start_terminal.sh
 ```
 
@@ -138,7 +152,8 @@ When auto-send is enabled, the display updates every 10 seconds showing:
 
 - **Active Mesh Nodes**: Top 5 most recently heard nodes with signal strength
 - **Text Message Panel**: Last 10 received messages (boxed, top right)
-- **Sent Messages Panel**: Last 10 sent messages with timestamps
+- **Sent Messages Panel**: Last 2 sent messages with timestamps
+- **ChatBot Status**: Shows "ENABLED ✅" or "💭 Thinking..." when processing
 - **Local Sensor Data**: Temperature, humidity, pressure (if BME280 present)
 - **Device Status**: Battery level, voltage
 - **Target Nodes**: Name, last heard time, signal strength (SNR/RSSI)
@@ -175,19 +190,25 @@ When in menu mode (or after pressing M), you'll see numbered options:
 
 5. **View Command Words**
    - Documentation for all keyword commands
-   - Shows STOP, START, FREQ, RADIOCHECK, WEATHERCHECK, KEYWORDS
+   - Shows STOP, START, FREQ, RADIOCHECK, WEATHERCHECK, KEYWORDS, CHATBOTON, CHATBOTOFF
    - Explains command format and responses
 
-6. **Start Auto-Send**
+6. **Configure ChatBot**
+   - Toggle ChatBot on/off
+   - Change model path
+   - Customize greeting message
+   - View ChatBot status
+
+7. **Start Auto-Send**
    - Begins auto-send dashboard mode
    - Live updates every 10 seconds
    - Press M for menu, S to send message
 
-7. **Stop Auto-Send**
+8. **Stop Auto-Send**
    - Stops automatic sending
    - Returns to main menu
 
-8. **View Dashboard**
+9. **View Dashboard**
    - View-only dashboard (no auto-send)
    - See current status snapshot
 
@@ -235,12 +256,40 @@ Target nodes can send commands to control your station:
 - `WEATHERCHECK` - Request current telemetry/weather data
   - Response includes temperature, humidity, pressure if available
 - `KEYWORDS` - Request list of all available commands
+- `CHATBOTON` - Enable AI ChatBot (selected nodes only)
+- `CHATBOTOFF` - Disable AI ChatBot (selected nodes only)
 
 **Command Features**:
 - Only accepted from selected target nodes
 - Automatic responses sent without user intervention
 - All commands and responses logged
 - View command help in menu option 5
+
+### ChatBot Usage
+
+The AI ChatBot responds to any text message that's not a keyword command:
+
+**Features**:
+- Responds to **all nodes** on the mesh (not just selected ones)
+- Rate limiting: 50 messages per hour for non-selected nodes
+- Selected nodes have unlimited access
+- Automatic message splitting (200 char Meshtastic limit)
+- Responses limited to 1000 chars total (max 5 messages)
+- Shows "💭 Thinking..." in dashboard during processing
+
+**Example Conversation**:
+```
+User: "What time is it?"
+Bot: "I don't have access to real-time data, but you can check your device clock."
+
+User: "Tell me about mesh networks"
+Bot: "Mesh networks are decentralized wireless networks where nodes relay data for each other..."
+```
+
+**Rate Limit Response**:
+```
+⚠️ Rate limit: 50 msg/hour. Please wait.
+```
 
 ### Message Format
 
