@@ -40,6 +40,10 @@ class MeshtasticTerminal:
         self.latest_snr = None
         self.latest_rssi = None
         
+        # Recent activity tracking
+        self.recent_activity = []  # List of recent packet activity
+        self.max_activity_items = 10  # Keep last 10 items
+        
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
         self.auto_send_enabled = False
@@ -82,6 +86,25 @@ class MeshtasticTerminal:
         self.logger.info("="*60)
         self.logger.info("Meshtastic Terminal Monitor Started")
         self.logger.info("="*60)
+        
+        # Setup activity log file
+        self.activity_log_file = 'mesh_activity.log'
+        self.activity_logger = logging.getLogger('MeshtasticActivity')
+        self.activity_logger.setLevel(logging.INFO)
+        
+        # Activity file handler
+        afh = logging.FileHandler(self.activity_log_file)
+        afh.setLevel(logging.INFO)
+        afh.setFormatter(logging.Formatter(
+            '%(asctime)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        ))
+        
+        # Add handler
+        self.activity_logger.addHandler(afh)
+        self.activity_logger.info("="*60)
+        self.activity_logger.info("Activity Log Started")
+        self.activity_logger.info("="*60)
         
     def load_config(self):
         """Load configuration from JSON file"""
@@ -271,6 +294,18 @@ class MeshtasticTerminal:
             # Log packet details
             self.logger.debug(f"RX: {portnum} from {from_id} | SNR: {snr} | RSSI: {rssi}")
             
+            # Add to recent activity
+            node_name = from_id
+            if from_id and from_id != 'Unknown':
+                node_info = self.get_node_info(from_id)
+                if node_info:
+                    node_name = node_info.get('user', {}).get('shortName') or node_info.get('user', {}).get('longName', from_id)
+            
+            activity_msg = f"📥 {portnum.replace('_APP', '')} from {node_name}"
+            if snr is not None:
+                activity_msg += f" SNR:{snr:.1f}"
+            self.add_activity(activity_msg)
+            
             # Process telemetry
             if portnum == 'TELEMETRY_APP':
                 self.process_telemetry(packet)
@@ -353,6 +388,19 @@ class MeshtasticTerminal:
         except Exception as e:
             self.logger.debug(f"Error getting current device telemetry: {e}")
         return None
+    
+    def add_activity(self, message: str):
+        """Add recent activity message with timestamp"""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        display_msg = f"[{timestamp}] {message}"
+        self.recent_activity.append(display_msg)
+        
+        # Write to activity log file
+        self.activity_logger.info(message)
+        
+        # Keep only last N items in memory
+        if len(self.recent_activity) > self.max_activity_items:
+            self.recent_activity.pop(0)
             
     def get_telemetry_message(self, dest_node_id: Optional[str] = None) -> str:
         """Generate telemetry message"""
@@ -481,6 +529,10 @@ class MeshtasticTerminal:
                 self.stats['packets_tx'] += 1
                 sent_count += 1
                 self.logger.info(f"TX to {node_id}: {message}")
+                
+                # Add to activity feed
+                node_name = node_info.get('user', {}).get('shortName') if node_info else node_id
+                self.add_activity(f"📤 Telemetry to {node_name}")
             
             self.last_send_time = time.time()
             msg = f"Sent telemetry to {sent_count} nodes"
@@ -602,6 +654,14 @@ class MeshtasticTerminal:
                 else:
                     print(f"\n  {node_id}")
                     print(f"  └─ Status: Not found in database")
+        
+        # Show recent activity
+        if self.recent_activity:
+            print(f"\n📊 RECENT ACTIVITY:")
+            print("-" * 60)
+            # Show most recent first (last 5)
+            for activity in self.recent_activity[-5:]:
+                print(f"   {activity}")
         
         # Show countdown
         elapsed = time.time() - self.last_send_time
