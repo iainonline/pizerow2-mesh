@@ -753,71 +753,92 @@ class MeshtasticTerminal:
     
     def view_conversation(self, node_id):
         """View and interact with conversation for a specific node"""
+        import select
+        import sys
+        
+        last_message_count = 0
+        
         while True:
-            self.clear_screen()
-            
-            node_info = self.get_node_info(node_id)
-            node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
-            long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
-            
-            print("=" * 80)
-            print(f"    💬 CONVERSATION WITH: {node_name} ({long_name})")
-            print("=" * 80)
-            
-            # Show conversation history
+            # Get current message count to detect new messages
             conversation = self.conversations.get(node_id, [])
+            current_message_count = len(conversation)
             
-            if conversation:
-                print("\n📝 MESSAGE HISTORY:")
-                print("-" * 80)
-                for msg in conversation[-20:]:  # Show last 20 messages
-                    time_str = msg['time']
-                    text = msg['text']
-                    direction = msg['direction']
-                    
-                    if direction == 'sent':
-                        # Messages we sent
-                        print(f"[{time_str}] 📤 You: {text}")
-                    else:
-                        # Messages we received
-                        signal_info = ""
-                        if msg.get('snr') is not None:
-                            signal_info = f" (SNR:{msg['snr']:.1f})"
-                        print(f"[{time_str}] 📥 {node_name}{signal_info}: {text}")
-                print("-" * 80)
-            else:
-                print("\n📭 No messages in this conversation yet")
-                print("-" * 80)
+            # Only refresh display if message count changed or first time
+            if current_message_count != last_message_count:
+                self.clear_screen()
+                
+                node_info = self.get_node_info(node_id)
+                node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+                long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
+                
+                print("=" * 80)
+                print(f"    💬 CONVERSATION WITH: {node_name} ({long_name})")
+                print("=" * 80)
+                
+                # Show conversation history
+                if conversation:
+                    print("\n📝 MESSAGE HISTORY:")
+                    print("-" * 80)
+                    for msg in conversation[-20:]:  # Show last 20 messages
+                        time_str = msg['time']
+                        text = msg['text']
+                        direction = msg['direction']
+                        
+                        if direction == 'sent':
+                            # Messages we sent
+                            print(f"[{time_str}] 📤 You: {text}")
+                        else:
+                            # Messages we received
+                            signal_info = ""
+                            if msg.get('snr') is not None:
+                                signal_info = f" (SNR:{msg['snr']:.1f})"
+                            print(f"[{time_str}] 📥 {node_name}{signal_info}: {text}")
+                    print("-" * 80)
+                else:
+                    print("\n📭 No messages in this conversation yet")
+                    print("-" * 80)
+                
+                # Show signal info if available
+                if node_info:
+                    last_heard = node_info.get('lastHeard', 0)
+                    if last_heard:
+                        age = time.time() - last_heard
+                        age_str = f"{int(age/60)}m ago" if age > 60 else f"{int(age)}s ago"
+                        print(f"\n📡 Last heard: {age_str}")
+                        
+                        if node_id in self.nodes_data:
+                            snr = self.nodes_data[node_id].get('last_snr')
+                            rssi = self.nodes_data[node_id].get('last_rssi')
+                            if snr or rssi:
+                                print(f"📶 Signal: SNR {snr:.1f}dB, RSSI {rssi}dBm")
+                
+                print("\nOptions:")
+                print("  [R] - Send Reply")
+                print("  [C] - Clear conversation history")
+                print("  [B] - Back to node list")
+                print("\n💡 Screen auto-refreshes every second for new messages")
+                
+                last_message_count = current_message_count
             
-            # Show signal info if available
-            if node_info:
-                last_heard = node_info.get('lastHeard', 0)
-                if last_heard:
-                    age = time.time() - last_heard
-                    age_str = f"{int(age/60)}m ago" if age > 60 else f"{int(age)}s ago"
-                    print(f"\n📡 Last heard: {age_str}")
-                    
-                    if node_id in self.nodes_data:
-                        snr = self.nodes_data[node_id].get('last_snr')
-                        rssi = self.nodes_data[node_id].get('last_rssi')
-                        if snr or rssi:
-                            print(f"📶 Signal: SNR {snr:.1f}dB, RSSI {rssi}dBm")
-            
-            print("\nOptions:")
-            print("  [R] - Send Reply")
-            print("  [C] - Clear conversation history")
-            print("  [B] - Back to node list")
-            
-            choice = input("\nSelect option: ").strip().upper()
-            
-            if choice == 'B':
-                return
-            elif choice == 'R':
-                self.send_message_to_node(node_id, node_name)
-            elif choice == 'C':
-                confirm = input("Clear all messages with this node? (yes/no): ").strip().lower()
-                if confirm == 'yes':
-                    self.conversations[node_id] = []
+            # Check for keyboard input with 1 second timeout
+            if select.select([sys.stdin], [], [], 1.0)[0]:
+                choice = sys.stdin.readline().strip().upper()
+                
+                if choice == 'B':
+                    return
+                elif choice == 'R':
+                    self.send_message_to_node(node_id, node_name)
+                    # Force refresh after sending
+                    last_message_count = -1
+                elif choice == 'C':
+                    print("\nClear all messages with this node? (yes/no): ", end='', flush=True)
+                    if select.select([sys.stdin], [], [], 10.0)[0]:
+                        confirm = sys.stdin.readline().strip().lower()
+                        if confirm == 'yes':
+                            self.conversations[node_id] = []
+                            print("✅ Conversation cleared")
+                            last_message_count = -1  # Force refresh
+                            time.sleep(1)
                     print("✅ Conversation cleared")
                     time.sleep(1)
     
