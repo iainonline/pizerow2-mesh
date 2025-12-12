@@ -428,60 +428,6 @@ class MeshtasticTerminal:
             print(f"Input error: {e}")
             time.sleep(1)
         
-    def show_nodes(self):
-        """Display mesh nodes"""
-        try:
-            self.clear_screen()
-            self.print_header()
-            
-            print("👥 MESH NODES")
-            print("-" * 60)
-            
-            try:
-                if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
-                    # Create a snapshot to avoid race conditions
-                    nodes_snapshot = list(self.interface.nodes.values())
-                    
-                    for node in nodes_snapshot:
-                        try:
-                            user = node.get('user', {})
-                            long_name = user.get('longName', 'Unknown')
-                            node_num = node.get('num')
-                            node_id = f"!{node_num:08x}" if node_num else 'N/A'
-                            snr = node.get('snr', 'N/A')
-                            hops = node.get('hopsAway', 0)
-                            
-                            snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
-                            
-                            last_heard = node.get('lastHeard')
-                            if last_heard:
-                                last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
-                            else:
-                                last_heard_str = 'Never'
-                            
-                            selected = "✓" if node_id in self.selected_nodes else " "
-                            print(f"[{selected}] {long_name} ({node_id})")
-                            print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
-                            print()
-                        except Exception as e:
-                            continue
-                else:
-                    print("No nodes available yet...")
-            except Exception as e:
-                print(f"Error accessing nodes: {e}")
-            
-            print()
-            try:
-                raw_input = input("Press Enter to continue...")
-            except (KeyboardInterrupt, EOFError):
-                pass
-            except Exception as e:
-                print(f"Input error: {e}")
-                time.sleep(1)
-        except Exception as e:
-            print(f"Critical error in show_nodes: {e}")
-            time.sleep(2)
-        
     def select_nodes(self):
         """Select nodes for auto-send"""
         while True:
@@ -638,11 +584,10 @@ class MeshtasticTerminal:
             print("MAIN MENU")
             print("-" * 60)
             print("1. View Current Telemetry")
-            print("2. View Mesh Nodes")
-            print("3. Configure Auto-Send")
-            print("4. Send Telemetry Now")
-            print("5. Manage Encryption Keys")
-            print("6. Exit")
+            print("2. Configure Auto-Send")
+            print("3. Send Telemetry Now")
+            print("4. Manage Encryption Keys")
+            print("5. Exit")
             print()
             
             choice = input("Enter choice: ").strip()
@@ -650,15 +595,13 @@ class MeshtasticTerminal:
             if choice == '1':
                 self.show_telemetry()
             elif choice == '2':
-                self.show_nodes()
-            elif choice == '3':
                 self.configure_auto_send()
-            elif choice == '4':
+            elif choice == '3':
                 self.send_telemetry()
                 time.sleep(2)
-            elif choice == '5':
+            elif choice == '4':
                 self.manage_keys()
-            elif choice == '6':
+            elif choice == '5':
                 print("\nExiting...")
                 sys.exit(0)
                 
