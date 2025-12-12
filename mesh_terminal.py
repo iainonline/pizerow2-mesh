@@ -574,6 +574,50 @@ class MeshtasticTerminal:
         print("🔄 AUTO-SEND MODE ACTIVE")
         print("=" * 60)
         
+        # Show all connected nodes with signal strength
+        if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
+            node_count = len(self.interface.nodes)
+            print(f"\n📡 MESH NETWORK ({node_count} nodes):")
+            print("-" * 60)
+            
+            # Sort nodes by last heard (most recent first)
+            nodes_list = []
+            for node_id, node in self.interface.nodes.items():
+                last_heard = node.get('lastHeard', 0)
+                nodes_list.append((last_heard, node_id, node))
+            nodes_list.sort(reverse=True)
+            
+            # Show up to 10 most recently heard nodes
+            for last_heard, node_id, node in nodes_list[:10]:
+                user = node.get('user', {})
+                short_name = user.get('shortName', node_id[-4:])
+                
+                # Get signal data
+                snr = None
+                rssi = None
+                if node_id in self.nodes_data:
+                    snr = self.nodes_data[node_id].get('last_snr')
+                    rssi = self.nodes_data[node_id].get('last_rssi')
+                
+                # Calculate time since last heard
+                age_str = "Unknown"
+                if last_heard:
+                    age = time.time() - last_heard
+                    if age < 60:
+                        age_str = f"{int(age)}s"
+                    elif age < 3600:
+                        age_str = f"{int(age/60)}m"
+                    else:
+                        age_str = f"{int(age/3600)}h"
+                
+                # Build display line
+                line = f"  {short_name:6s} {age_str:>5s}"
+                if snr is not None:
+                    line += f"  SNR:{snr:>5.1f}dB"
+                if rssi is not None:
+                    line += f"  RSSI:{rssi:>4d}dBm"
+                print(line)
+        
         # Get current device telemetry from interface.nodes
         current_telemetry = self.get_current_device_telemetry()
         
