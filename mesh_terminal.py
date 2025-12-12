@@ -117,6 +117,24 @@ class MeshtasticTerminal:
             msg = f"Error saving config: {e}"
             print(f"⚠️  {msg}")
             self.logger.error(msg)
+    
+    def clear_usb_port_lock(self):
+        """Clear any stale locks on USB port before connecting"""
+        try:
+            import serial
+            import glob
+            # Find USB ports
+            ports = glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*')
+            for port in ports:
+                try:
+                    # Open and immediately close to clear any stale locks
+                    s = serial.Serial(port, timeout=1)
+                    s.close()
+                    self.logger.debug(f"Cleared lock on {port}")
+                except:
+                    pass  # Port might be in use or not accessible
+        except Exception as e:
+            self.logger.debug(f"Port lock clear attempt: {e}")
             
     def connect_device(self):
         """Connect to Meshtastic device with retry and Pi Zero 2 W error resilience"""
@@ -131,6 +149,9 @@ class MeshtasticTerminal:
                     time.sleep(retry_delay)
                 
                 print("📡 Connecting to device via USB...")
+                
+                # Clear any stale port locks before attempting connection
+                self.clear_usb_port_lock()
                 
                 # Suppress meshtastic library's protobuf parsing errors for Pi Zero 2 W
                 import logging as stdlib_logging

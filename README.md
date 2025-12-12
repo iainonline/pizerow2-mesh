@@ -259,6 +259,21 @@ sudo usermod -a -G dialout $USER
 # Check USB cable quality
 ```
 
+**"Resource temporarily unavailable" / Port Lock Error**
+The application now automatically clears stale USB port locks before connecting. This fixes the common error:
+```
+[Errno 11] Could not exclusively lock port /dev/ttyUSB0: Resource temporarily unavailable
+```
+
+The automatic port clearing happens on every connection attempt, so no manual intervention is needed. If you still experience issues:
+```bash
+# Manually check for processes using the port
+sudo fuser -v /dev/ttyUSB0
+
+# Kill specific process if needed
+sudo kill -9 <PID>
+```
+
 **GUI Not Starting**
 ```bash
 # Ensure tkinter is installed
@@ -432,7 +447,12 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v3.0.0 (Current - Terminal Edition)
+### v3.0.1 (Current - Terminal Edition)
+- **Automatic USB port lock clearing** - Fixes "Resource temporarily unavailable" errors
+- **Reliable connection recovery** - Clears stale locks before every connection attempt
+- **Enhanced stability** - No manual intervention needed for port lock issues
+
+### v3.0.0 (Terminal Edition)
 - **Terminal-based interface** - No GUI dependencies, perfect for headless operation
 - **Raspberry Pi Zero 2 W optimized** - Lightweight and SSH-friendly
 - **Enhanced auto-send display** - Live updates every 10 seconds with:
