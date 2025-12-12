@@ -48,6 +48,9 @@ class MeshtasticTerminal:
         self.recent_messages = []  # List of recent text messages
         self.max_message_items = 10  # Keep last 10 messages
         
+        # Conversation tracking by node
+        self.conversations = {}  # {node_id: [{'time': timestamp, 'from': node_id, 'to': node_id, 'text': message, 'direction': 'sent'/'received'}]}
+        
         # Message acknowledgment tracking per target node
         self.message_acks = {}  # {node_id: {'last_ack_time': timestamp, 'ack_status': 'ACK'/'NAK'/'PENDING'}}
         
@@ -347,6 +350,19 @@ class MeshtasticTerminal:
                 # Keep only last N messages
                 if len(self.recent_messages) > self.max_message_items:
                     self.recent_messages.pop(0)
+                
+                # Add to conversations
+                if from_id not in self.conversations:
+                    self.conversations[from_id] = []
+                self.conversations[from_id].append({
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'from': from_id,
+                    'to': 'local',
+                    'text': text,
+                    'direction': 'received',
+                    'snr': snr,
+                    'rssi': rssi
+                })
             elif portnum == 'ROUTING_APP':
                 # Handle ACK/NAK responses
                 self.handle_routing_response(packet)
@@ -670,6 +686,208 @@ class MeshtasticTerminal:
         except Exception as e:
             self.logger.error(f"Error sending keyword info: {e}")
             return False
+    
+    def message_interface(self):
+        """Interactive message interface to view and send messages"""
+        while True:
+            self.clear_screen()
+            print("=" * 80)
+            print("    💬 MESSAGE INTERFACE")
+            print("=" * 80)
+            
+            # Get all nodes with conversations
+            nodes_with_messages = list(self.conversations.keys())
+            
+            # Add selected nodes even if no messages yet
+            all_nodes = set(nodes_with_messages)
+            if self.selected_nodes:
+                all_nodes.update(self.selected_nodes)
+            
+            # Add all known nodes from mesh
+            if self.interface and hasattr(self.interface, 'nodes'):
+                for node_id in self.interface.nodes.keys():
+                    all_nodes.add(node_id)
+            
+            node_list = sorted(all_nodes)
+            
+            if not node_list:
+                print("\n❌ No nodes available")
+                print("\nPress Enter to return...")
+                input()
+                return
+            
+            # Display nodes with message counts
+            print("\n📱 NODES:")
+            print("-" * 80)
+            for idx, node_id in enumerate(node_list, 1):
+                node_info = self.get_node_info(node_id)
+                node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+                long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
+                
+                msg_count = len(self.conversations.get(node_id, []))
+                unread_indicator = ""
+                if msg_count > 0:
+                    unread_indicator = f" ({msg_count} msgs)"
+                
+                # Check if this is a target node
+                target_indicator = " ⭐" if node_id in self.selected_nodes else ""
+                
+                print(f"  {idx}. {node_name:8s} {long_name[:30]:30s}{unread_indicator}{target_indicator}")
+            
+            print("-" * 80)
+            print("\nOptions:")
+            print("  [Number] - View conversation with node")
+            print("  [N]      - Send message to new node")
+            print("  [B]      - Back to dashboard")
+            
+            choice = input("\nSelect option: ").strip().upper()
+            
+            if choice == 'B':
+                return
+            elif choice == 'N':
+                self.send_new_message(node_list)
+            elif choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(node_list):
+                    self.view_conversation(node_list[idx])
+    
+    def view_conversation(self, node_id):
+        """View and interact with conversation for a specific node"""
+        while True:
+            self.clear_screen()
+            
+            node_info = self.get_node_info(node_id)
+            node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+            long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
+            
+            print("=" * 80)
+            print(f"    💬 CONVERSATION WITH: {node_name} ({long_name})")
+            print("=" * 80)
+            
+            # Show conversation history
+            conversation = self.conversations.get(node_id, [])
+            
+            if conversation:
+                print("\n📝 MESSAGE HISTORY:")
+                print("-" * 80)
+                for msg in conversation[-20:]:  # Show last 20 messages
+                    time_str = msg['time']
+                    text = msg['text']
+                    direction = msg['direction']
+                    
+                    if direction == 'sent':
+                        # Messages we sent
+                        print(f"[{time_str}] 📤 You: {text}")
+                    else:
+                        # Messages we received
+                        signal_info = ""
+                        if msg.get('snr') is not None:
+                            signal_info = f" (SNR:{msg['snr']:.1f})"
+                        print(f"[{time_str}] 📥 {node_name}{signal_info}: {text}")
+                print("-" * 80)
+            else:
+                print("\n📭 No messages in this conversation yet")
+                print("-" * 80)
+            
+            # Show signal info if available
+            if node_info:
+                last_heard = node_info.get('lastHeard', 0)
+                if last_heard:
+                    age = time.time() - last_heard
+                    age_str = f"{int(age/60)}m ago" if age > 60 else f"{int(age)}s ago"
+                    print(f"\n📡 Last heard: {age_str}")
+                    
+                    if node_id in self.nodes_data:
+                        snr = self.nodes_data[node_id].get('last_snr')
+                        rssi = self.nodes_data[node_id].get('last_rssi')
+                        if snr or rssi:
+                            print(f"📶 Signal: SNR {snr:.1f}dB, RSSI {rssi}dBm")
+            
+            print("\nOptions:")
+            print("  [R] - Send Reply")
+            print("  [C] - Clear conversation history")
+            print("  [B] - Back to node list")
+            
+            choice = input("\nSelect option: ").strip().upper()
+            
+            if choice == 'B':
+                return
+            elif choice == 'R':
+                self.send_message_to_node(node_id, node_name)
+            elif choice == 'C':
+                confirm = input("Clear all messages with this node? (yes/no): ").strip().lower()
+                if confirm == 'yes':
+                    self.conversations[node_id] = []
+                    print("✅ Conversation cleared")
+                    time.sleep(1)
+    
+    def send_new_message(self, node_list):
+        """Send a message to a selected node"""
+        self.clear_screen()
+        print("=" * 80)
+        print("    📤 SEND MESSAGE TO NODE")
+        print("=" * 80)
+        
+        print("\nAvailable nodes:")
+        for idx, node_id in enumerate(node_list, 1):
+            node_info = self.get_node_info(node_id)
+            node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+            print(f"  {idx}. {node_name}")
+        
+        choice = input("\nSelect node number (or B to go back): ").strip()
+        
+        if choice.upper() == 'B':
+            return
+        
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(node_list):
+                node_id = node_list[idx]
+                node_info = self.get_node_info(node_id)
+                node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+                self.send_message_to_node(node_id, node_name)
+    
+    def send_message_to_node(self, node_id, node_name):
+        """Send a text message to a specific node"""
+        print(f"\n📝 Message to {node_name} (max 200 chars, or 'cancel' to abort):")
+        message = input("> ").strip()
+        
+        if message.lower() == 'cancel' or not message:
+            print("❌ Message cancelled")
+            time.sleep(1)
+            return
+        
+        if len(message) > 200:
+            print("⚠️  Message too long, truncating to 200 characters...")
+            message = message[:200]
+        
+        try:
+            self.interface.sendText(message, destinationId=node_id, wantAck=True)
+            self.stats['packets_tx'] += 1
+            
+            # Add to conversation
+            if node_id not in self.conversations:
+                self.conversations[node_id] = []
+            
+            self.conversations[node_id].append({
+                'time': datetime.now().strftime('%H:%M:%S'),
+                'from': 'local',
+                'to': node_id,
+                'text': message,
+                'direction': 'sent'
+            })
+            
+            # Add to activity
+            self.add_activity(f"📤 Sent message to {node_name}")
+            
+            self.logger.info(f"Sent message to {node_id} ({node_name}): {message}")
+            print(f"✅ Message sent to {node_name}")
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"❌ Error sending message: {e}")
+            self.logger.error(f"Error sending message to {node_id}: {e}")
+            time.sleep(2)
             
     def get_node_info(self, node_id: str) -> Optional[Dict]:
         """Get node information by ID"""
@@ -919,7 +1137,7 @@ class MeshtasticTerminal:
             elapsed = time.time() - self.last_send_time
             remaining = max(0, int(self.auto_send_interval - elapsed))
             print(f"\n⏱️  Next send in: {remaining} seconds")
-        print("\n💡 Press (M) for Menu | Ctrl+C to Exit")
+        print("\n💡 Press (M) for Menu | (S) to Send Message | Ctrl+C to Exit")
         print("=" * 120)
             
     def clear_screen(self):
@@ -1413,7 +1631,7 @@ def main():
                     terminal.display_auto_send_status()
                     last_display = time.time()
                 
-                # Check for 'M' key press with short timeout
+                # Check for key press with short timeout
                 if select.select([sys.stdin], [], [], 0.5)[0]:
                     key = sys.stdin.readline().strip().upper()
                     if key == 'M':
@@ -1421,6 +1639,11 @@ def main():
                         print("\nEntering menu...")
                         time.sleep(1)
                         break
+                    elif key == 'S':
+                        terminal.logger.info("User pressed S to send message")
+                        terminal.message_interface()
+                        terminal.clear_screen()
+                        terminal.print_header()
                 
                 time.sleep(0.5)
         except KeyboardInterrupt:
