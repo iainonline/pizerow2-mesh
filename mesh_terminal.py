@@ -58,6 +58,7 @@ class MeshtasticTerminal:
         
         # Keyword command control
         self.auto_send_paused = False  # STOP/START command control
+        self.suppress_output = False  # Suppress console output when in submenus
         
         # Auto-send configuration
         self.config_file = 'terminal_config.json'
@@ -137,18 +138,22 @@ class MeshtasticTerminal:
     
     def get_line_input(self, prompt=""):
         """Get a full line of input (for text messages, numbers, etc)"""
-        # Ensure terminal is in canonical mode
+        # Save current terminal settings
         old_settings = termios.tcgetattr(sys.stdin)
         try:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            # Force terminal into canonical mode for line input
+            new_settings = termios.tcgetattr(sys.stdin)
+            new_settings[3] = new_settings[3] | termios.ICANON | termios.ECHO
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+            
             if prompt:
                 print(prompt, end='', flush=True)
-            return input()
-        except:
-            # Restore settings on error
+            result = input()
+            return result
+        finally:
+            # Restore original settings
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            raise
-        
+    
     def load_config(self):
         """Load configuration from JSON file"""
         try:
@@ -452,6 +457,24 @@ class MeshtasticTerminal:
                     reply_message = f"📡 RADIOCHECK: SNR {snr:.1f}dB | RSSI {rssi}dBm | Age {age}s"
                 else:
                     reply_message = "📡 RADIOCHECK: No recent signal data available"
+            elif text == 'WEATHERCHECK':
+                # Respond with telemetry data
+                self.logger.info(f"WEATHERCHECK requested by {from_id}")
+                print(f"\n🌡️  WEATHERCHECK requested by {from_id}")
+                self.add_activity(f"🌡️  WEATHERCHECK from {from_id}")
+                
+                # Get current telemetry message
+                telemetry_msg = self.get_telemetry_message(dest_node_id=from_id)
+                if telemetry_msg and telemetry_msg != "No telemetry data available":
+                    reply_message = f"🌡️  WEATHERCHECK: {telemetry_msg}"
+                else:
+                    reply_message = "🌡️  WEATHERCHECK: No telemetry data available"
+            elif text == 'KEYWORDS':
+                # Respond with list of available keywords
+                self.logger.info(f"KEYWORDS requested by {from_id}")
+                print(f"\n📋 KEYWORDS requested by {from_id}")
+                self.add_activity(f"📋 KEYWORDS from {from_id}")
+                reply_message = "📋 Available: STOP START FREQ### RADIOCHECK WEATHERCHECK KEYWORDS"
             
             # Send auto-reply if a response was generated
             if reply_message and self.interface:
@@ -731,8 +754,9 @@ class MeshtasticTerminal:
                 node_name = node_info.get('user', {}).get('shortName') if node_info else node_id
                 self.add_activity(f"📤 Telemetry to {node_name}")
                 
-                # Print confirmation with node name
-                print(f"✅ Sent telemetry to {node_name}")
+                # Print confirmation with node name (unless output suppressed)
+                if not self.suppress_output:
+                    print(f"✅ Sent telemetry to {node_name}")
             
             self.last_send_time = time.time()
             self.logger.info(f"Sent telemetry to {sent_count} nodes")
@@ -750,7 +774,7 @@ class MeshtasticTerminal:
             return False
         
         try:
-            keyword_msg = f"Commands: STOP START FREQ## RADIOCHECK | Interval: {self.auto_send_interval}s"
+            keyword_msg = f"Commands: STOP START FREQ## RADIOCHECK WEATHERCHECK KEYWORDS | Interval: {self.auto_send_interval}s"
             
             for node_id in self.selected_nodes:
                 self.interface.sendText(keyword_msg, destinationId=node_id, wantAck=False)
@@ -765,78 +789,96 @@ class MeshtasticTerminal:
     
     def message_interface(self):
         """Interactive message interface to view and send messages"""
-        while True:
-            self.clear_screen()
-            print("=" * 80)
-            print("    💬 MESSAGE INTERFACE")
-            print("=" * 80)
-            
-            # Get all nodes with conversations
-            nodes_with_messages = list(self.conversations.keys())
-            
-            # Add selected nodes even if no messages yet
-            all_nodes = set(nodes_with_messages)
-            if self.selected_nodes:
-                all_nodes.update(self.selected_nodes)
-            
-            # Add all known nodes from mesh
-            if self.interface and hasattr(self.interface, 'nodes'):
-                for node_id in self.interface.nodes.keys():
-                    all_nodes.add(node_id)
-            
-            node_list = sorted(all_nodes)
-            
-            if not node_list:
-                print("\n❌ No nodes available")
-                self.get_single_key("\nPress any key to return...")
-                return
-            
-            # Display nodes with message counts
-            print("\n📱 NODES:")
-            print("-" * 80)
-            for idx, node_id in enumerate(node_list, 1):
-                node_info = self.get_node_info(node_id)
-                node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
-                long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
+        self.suppress_output = True  # Suppress auto-send output while in message interface
+        try:
+            while True:
+                self.clear_screen()
+                print("=" * 80)
+                print("    💬 MESSAGE INTERFACE")
+                print("=" * 80)
                 
-                msg_count = len(self.conversations.get(node_id, []))
-                unread_indicator = ""
-                if msg_count > 0:
-                    unread_indicator = f" ({msg_count} msgs)"
+                # Get all nodes with conversations
+                nodes_with_messages = list(self.conversations.keys())
                 
-                # Check if this is a target node
-                target_indicator = " ⭐" if node_id in self.selected_nodes else ""
+                # Add selected nodes even if no messages yet
+                all_nodes = set(nodes_with_messages)
+                if self.selected_nodes:
+                    all_nodes.update(self.selected_nodes)
                 
-                print(f"  {idx}. {node_name:8s} {long_name[:30]:30s}{unread_indicator}{target_indicator}")
-            
-            print("-" * 80)
-            print("\nOptions:")
-            print("  [Number] - View conversation with node")
-            print("  [N]      - Send message to new node")
-            print("  [B]      - Back to dashboard")
-            
-            choice = self.get_line_input("\nSelect option: ").strip().upper()
-            
-            if choice == 'B':
-                return
-            elif choice == 'N':
-                self.send_new_message(node_list)
-            elif choice.isdigit():
-                idx = int(choice) - 1
-                if 0 <= idx < len(node_list):
-                    self.view_conversation(node_list[idx])
+                # Add all known nodes from mesh
+                if self.interface and hasattr(self.interface, 'nodes'):
+                    for node_id in self.interface.nodes.keys():
+                        all_nodes.add(node_id)
+                
+                node_list = sorted(all_nodes)
+                
+                if not node_list:
+                    print("\n❌ No nodes available")
+                    self.get_single_key("\nPress any key to return...")
+                    return
+                
+                # Display nodes with message counts
+                print("\n📱 NODES:")
+                print("-" * 80)
+                for idx, node_id in enumerate(node_list, 1):
+                    node_info = self.get_node_info(node_id)
+                    node_name = node_info.get('user', {}).get('shortName', node_id[-4:]) if node_info else node_id[-4:]
+                    long_name = node_info.get('user', {}).get('longName', '') if node_info else ''
+                    
+                    msg_count = len(self.conversations.get(node_id, []))
+                    unread_indicator = ""
+                    if msg_count > 0:
+                        unread_indicator = f" ({msg_count} msgs)"
+                    
+                    # Check if this is a target node
+                    target_indicator = " ⭐" if node_id in self.selected_nodes else ""
+                    
+                    print(f"  {idx}. {node_name:8s} {long_name[:30]:30s}{unread_indicator}{target_indicator}")
+                
+                print("-" * 80)
+                print("\nOptions:")
+                print("  [N] - Enter node number to view conversation")
+                print("  [B] - Back to dashboard")
+                
+                choice = self.get_single_key("\nSelect option: ").strip().upper()
+                
+                if choice == 'B':
+                    return
+                elif choice == 'N':
+                    # Get node number
+                    print(f"You pressed: {choice}")
+                    num_choice = self.get_line_input("\nEnter node number: ").strip()
+                    if num_choice.isdigit():
+                        idx = int(num_choice) - 1
+                        if 0 <= idx < len(node_list):
+                            node_id = node_list[idx]
+                            self.logger.info(f"Opening conversation with {node_id}")
+                            print(f"\n📖 Opening conversation with node {idx+1}...")
+                            time.sleep(0.5)  # Brief pause for user feedback
+                            self.view_conversation(node_id)
+                        else:
+                            print(f"\n❌ Invalid node number. Must be 1-{len(node_list)}")
+                            time.sleep(1.5)
+                else:
+                    print(f"\n❌ Invalid choice: {choice}")
+                    time.sleep(1)
+        finally:
+            self.suppress_output = False  # Restore output when exiting
     
     def view_conversation(self, node_id):
         """View and interact with conversation for a specific node"""
         import select
         import sys
         
-        last_message_count = 0
+        self.logger.info(f"Entering view_conversation for {node_id}")
+        last_message_count = -1  # Set to -1 to force initial display
         
         while True:
             # Get current message count to detect new messages
             conversation = self.conversations.get(node_id, [])
             current_message_count = len(conversation)
+            
+            self.logger.debug(f"Conversation check: current={current_message_count}, last={last_message_count}")
             
             # Only refresh display if message count changed or first time
             if current_message_count != last_message_count:
@@ -895,27 +937,33 @@ class MeshtasticTerminal:
                 
                 last_message_count = current_message_count
             
-            # Check for keyboard input with 1 second timeout
-            if select.select([sys.stdin], [], [], 1.0)[0]:
-                choice = sys.stdin.readline().strip().upper()
-                
-                if choice == 'B':
-                    return
-                elif choice == 'R':
-                    self.send_message_to_node(node_id, node_name)
-                    # Force refresh after sending
-                    last_message_count = -1
-                elif choice == 'C':
-                    print("\nClear all messages with this node? (yes/no): ", end='', flush=True)
-                    if select.select([sys.stdin], [], [], 10.0)[0]:
-                        confirm = sys.stdin.readline().strip().lower()
+            # Check for keyboard input with 1 second timeout (use single key for simplicity)
+            # Set terminal to cbreak for non-blocking input check
+            old_settings = termios.tcgetattr(sys.stdin)
+            try:
+                tty.setcbreak(sys.stdin.fileno())
+                if select.select([sys.stdin], [], [], 1.0)[0]:
+                    # Restore canonical mode for reading the choice
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    choice = sys.stdin.read(1).upper()
+                    
+                    if choice == 'B':
+                        return
+                    elif choice == 'R':
+                        self.send_message_to_node(node_id, node_name)
+                        # Force refresh after sending
+                        last_message_count = -1
+                    elif choice == 'C':
+                        # Switch to line input for confirmation
+                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                        confirm = self.get_line_input("\nClear all messages with this node? (yes/no): ").strip().lower()
                         if confirm == 'yes':
                             self.conversations[node_id] = []
                             print("✅ Conversation cleared")
                             last_message_count = -1  # Force refresh
                             time.sleep(1)
-                    print("✅ Conversation cleared")
-                    time.sleep(1)
+            finally:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
     
     def send_new_message(self, node_list):
         """Send a message to a selected node"""
@@ -1066,6 +1114,57 @@ class MeshtasticTerminal:
                 message_lines.append("")
         else:
             message_lines.append("   No messages yet")
+        
+        # Add sent messages section
+        message_lines.append("")
+        message_lines.append("📤 SENT MESSAGES (Last 10):")
+        message_lines.append("-" * 40)
+        
+        # Collect sent messages from all conversations
+        sent_msgs = []
+        for node_id, conv in self.conversations.items():
+            for msg in conv:
+                if msg.get('direction') == 'sent':
+                    sent_msgs.append({
+                        'time': msg['time'],
+                        'to': msg['to'],
+                        'text': msg['text']
+                    })
+        
+        # Sort by time and get last 10
+        sent_msgs.sort(key=lambda x: x['time'])
+        recent_sent = sent_msgs[-10:] if len(sent_msgs) > 10 else sent_msgs
+        
+        if recent_sent:
+            for msg in recent_sent:
+                timestamp = msg['time']
+                to_node = msg['to'][-4:]  # Last 4 chars of node ID
+                text = msg['text']
+                
+                # Message header line
+                header = f"[{timestamp}] To:{to_node}"
+                message_lines.append(f"   {header}")
+                
+                # Message text - wrap if needed
+                max_text_width = 37
+                if len(text) <= max_text_width:
+                    message_lines.append(f"      {text}")
+                else:
+                    # Split long messages
+                    words = text.split()
+                    line = "      "
+                    for word in words:
+                        if len(line) + len(word) + 1 <= max_text_width + 6:
+                            line += word + " "
+                        else:
+                            message_lines.append(line)
+                            line = "      " + word + " "
+                    if line.strip():
+                        message_lines.append(line)
+                
+                message_lines.append("")
+        else:
+            message_lines.append("   No messages sent yet")
         
         # Show all connected nodes with signal strength
         left_content = []
@@ -1597,6 +1696,55 @@ class MeshtasticTerminal:
         print()
         self.get_single_key("Press any key to continue...")
     
+    def show_command_help(self):
+        """Display all available command words and their responses"""
+        self.clear_screen()
+        self.print_header()
+        
+        print("📋 AVAILABLE COMMAND WORDS")
+        print("=" * 80)
+        print()
+        print("Commands can be sent by target nodes to control this station:")
+        print()
+        print("1️⃣  STOP")
+        print("   └─ Pauses automatic telemetry sending")
+        print("   └─ Response: '✅ AUTO-SEND STOPPED'")
+        print()
+        print("2️⃣  START")
+        print("   └─ Resumes automatic telemetry sending")
+        print("   └─ Response: '✅ AUTO-SEND STARTED'")
+        print()
+        print("3️⃣  FREQ##")
+        print("   └─ Changes telemetry send interval (30-3600 seconds)")
+        print("   └─ Example: FREQ60 sets interval to 60 seconds")
+        print("   └─ Response: '✅ FREQ set to ##s (was XXs)'")
+        print("   └─ Invalid: '❌ FREQ must be 30-3600 seconds'")
+        print()
+        print("4️⃣  RADIOCHECK")
+        print("   └─ Requests signal strength information")
+        print("   └─ Response: '📡 RADIOCHECK: SNR X.XdB | RSSI XdBm | Age Xs'")
+        print("   └─ Shows current radio link quality from requesting node")
+        print()
+        print("5️⃣  WEATHERCHECK")
+        print("   └─ Requests current telemetry/weather data")
+        print("   └─ Response: '🌡️  WEATHERCHECK: [telemetry data]'")
+        print("   └─ Includes temperature, humidity, pressure if available")
+        print()
+        print("6️⃣  KEYWORDS")
+        print("   └─ Requests list of available commands")
+        print("   └─ Response: '📋 Available: STOP START FREQ## RADIOCHECK WEATHERCHECK KEYWORDS'")
+        print("   └─ Useful for discovering what commands this station supports")
+        print()
+        print("-" * 80)
+        print("⚙️  NOTES:")
+        print("   • Commands only accepted from selected target nodes")
+        print("   • All responses are automatic (no manual intervention needed)")
+        print("   • Responses sent without ACK to reduce mesh traffic")
+        print("   • Commands and responses logged to activity feed")
+        print("   • Command history visible in conversation view")
+        print()
+        self.get_single_key("Press any key to continue...")
+    
     def run_auto_send_dashboard(self):
         """Run the auto-send dashboard with live updates"""
         import select
@@ -1669,9 +1817,11 @@ class MeshtasticTerminal:
             print("2. Configure Auto-Send")
             print("3. Send Telemetry Now")
             print("4. Manage Encryption Keys")
-            print("5. Start Auto-Send Dashboard")
-            print("6. View Dashboard")
-            print("7. Exit")
+            print("5. View Command Words")
+            print("6. Start Auto-Send")
+            print("7. Stop Auto-Send")
+            print("8. View Dashboard")
+            print("9. Exit")
             print()
             
             choice = self.get_single_key("Enter choice: ").strip()
@@ -1686,6 +1836,8 @@ class MeshtasticTerminal:
             elif choice == '4':
                 self.manage_keys()
             elif choice == '5':
+                self.show_command_help()
+            elif choice == '6':
                 # Start auto-send dashboard mode
                 if not self.auto_send_enabled:
                     print("\n⚠️  Auto-send is disabled. Enable it in Configure Auto-Send first.")
@@ -1694,17 +1846,26 @@ class MeshtasticTerminal:
                     print("\n⚠️  No nodes selected. Configure nodes in Auto-Send settings first.")
                     time.sleep(2)
                 else:
-                    print("\nStarting auto-send dashboard...")
+                    print("\nStarting auto-send...")
                     time.sleep(1)
                     # Run the auto-send dashboard loop
                     self.run_auto_send_dashboard()
-            elif choice == '6':
+            elif choice == '7':
+                # Stop auto-send
+                if self.auto_send_enabled:
+                    self.auto_send_enabled = False
+                    self.save_config()
+                    print("\n✅ Auto-send stopped")
+                else:
+                    print("\n⚠️  Auto-send is already disabled")
+                time.sleep(1.5)
+            elif choice == '8':
                 # View dashboard without auto-send
                 print("\nOpening dashboard view...")
                 time.sleep(1)
                 self.display_auto_send_status()
                 self.get_single_key("\nPress any key to return to menu...")
-            elif choice == '7':
+            elif choice == '9':
                 print("\nExiting...")
                 sys.exit(0)
                 

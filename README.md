@@ -1,4 +1,4 @@
-# Meshtastic Terminal Monitor v1.1
+# Meshtastic Terminal Monitor v1.3
 
 A lightweight terminal-based monitoring application for Meshtastic mesh networks on Raspberry Pi. Perfect for headless operation on Raspberry Pi Zero 2 W. Monitor telemetry, send encrypted direct messages to selected nodes, track mesh network activity, and view text messages in real-time with a two-column dashboard layout.
 
@@ -136,13 +136,18 @@ The program will:
 
 When auto-send is enabled, the display updates every 10 seconds showing:
 
+- **Active Mesh Nodes**: Top 5 most recently heard nodes with signal strength
+- **Text Message Panel**: Last 10 received messages (boxed, top right)
+- **Sent Messages Panel**: Last 10 sent messages with timestamps
 - **Local Sensor Data**: Temperature, humidity, pressure (if BME280 present)
 - **Device Status**: Battery level, voltage
 - **Target Nodes**: Name, last heard time, signal strength (SNR/RSSI)
+- **Recent Activity**: Last 20 packets in/out
 - **Countdown**: Time remaining until next send
 
 **Controls**:
 - Press **M** then Enter to access menu
+- Press **S** then Enter to send message
 - Press **Ctrl+C** to exit gracefully
 
 ### Main Menu
@@ -168,7 +173,25 @@ When in menu mode (or after pressing M), you'll see numbered options:
    - Information about PKC encryption
    - Troubleshooting guide for Direct Messages
 
-5. **Exit**
+5. **View Command Words**
+   - Documentation for all keyword commands
+   - Shows STOP, START, FREQ, RADIOCHECK, WEATHERCHECK, KEYWORDS
+   - Explains command format and responses
+
+6. **Start Auto-Send**
+   - Begins auto-send dashboard mode
+   - Live updates every 10 seconds
+   - Press M for menu, S to send message
+
+7. **Stop Auto-Send**
+   - Stops automatic sending
+   - Returns to main menu
+
+8. **View Dashboard**
+   - View-only dashboard (no auto-send)
+   - See current status snapshot
+
+9. **Exit**
    - Gracefully close the application
 
 ### Selecting Target Nodes
@@ -178,6 +201,46 @@ In "Configure Auto-Send" menu, choose "Select Nodes":
 - Enter node number to toggle selection
 - Selected nodes marked with ✅
 - Press Enter (blank) when done
+
+### Interactive Message Interface
+
+Access message interface from auto-send dashboard by pressing **S**:
+
+**Features**:
+- View all nodes with message counts
+- Open conversation view with any node
+- Send messages directly from conversation
+- See full message history per node
+- Real-time message updates
+- Clear conversation history
+
+**Navigation**:
+- Press **N** to select a node number
+- Enter number to view conversation
+- Press **R** to reply in conversation view
+- Press **B** to go back
+- Press **C** to clear conversation
+
+### Keyword Commands
+
+Target nodes can send commands to control your station:
+
+**Available Commands**:
+- `STOP` - Pause automatic telemetry sending
+- `START` - Resume automatic telemetry sending  
+- `FREQ##` - Change send interval (30-3600 seconds)
+  - Example: `FREQ60` sets interval to 60 seconds
+- `RADIOCHECK` - Request signal strength information
+  - Response includes SNR, RSSI, and age of last signal
+- `WEATHERCHECK` - Request current telemetry/weather data
+  - Response includes temperature, humidity, pressure if available
+- `KEYWORDS` - Request list of all available commands
+
+**Command Features**:
+- Only accepted from selected target nodes
+- Automatic responses sent without user intervention
+- All commands and responses logged
+- View command help in menu option 5
 
 ### Message Format
 
@@ -466,7 +529,21 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 
 ## Changelog
 
-### v3.1.0 (Current - Dashboard Edition)
+### v1.3 (Current - Enhanced Messaging)
+- **Interactive Message Interface** - View conversations with any node
+- **Sent Message Tracking** - Dashboard displays last 10 sent messages
+- **Enhanced Keyword Commands** - Added WEATHERCHECK and KEYWORDS commands
+- **Command Help Screen** - Detailed documentation for all command words
+- **Improved Menu Navigation** - Better keyboard input handling
+- **Message Conversation View** - Full conversation history with each node
+- **Real-Time Updates** - Message displays update automatically
+- **Enhanced Dashboard** - Shows both received and sent messages
+
+**New Keyword Commands**:
+- `WEATHERCHECK` - Requests current telemetry/weather data
+- `KEYWORDS` - Lists all available commands
+
+### v1.2 (Dashboard Edition)
 - **Dashboard Layout** - Active nodes at top, scrolling activity below
 - **Live Mesh Network View** - Top 5 most recently heard nodes (last 30 minutes)
 - **Real-Time Activity Feed** - Last 20 packets with timestamps in continuous scroll
@@ -477,7 +554,7 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 - **Automatic USB Port Lock Clearing** - Fixes "Resource temporarily unavailable" errors
 - **Enhanced Stability** - No manual intervention needed for port locks
 
-### v3.0.0 (Terminal Edition)
+### v1.1 (Terminal Edition)
 - **Terminal-based interface** - No GUI dependencies, perfect for headless operation
 - **Enhanced auto-send display** - Live updates every 10 seconds
 - **Immediate send on startup** - No waiting for first telemetry
@@ -489,15 +566,7 @@ This project is provided as-is for use with Meshtastic devices. See LICENSE file
 - **PKC Direct Messages** - Automatic encryption (firmware 2.5.0+)
 - **Configuration persistence** - Settings saved to terminal_config.json
 
-### v2.0.0 (Legacy - GUI Version)
-- Complete GUI dashboard with real-time monitoring
-- Auto-send telemetry with encrypted Direct Messages
-- Node selection interface with persistence
-- Network statistics and LoRa traffic feed
-- Environment sensor support
-- Dark theme GUI optimized for long sessions
-
-### v1.0.0 (Legacy - BLE CLI)
+### v1.0 (Legacy - BLE CLI)
 - BLE communication support
 - CLI menu interface
 - Basic telemetry monitoring
