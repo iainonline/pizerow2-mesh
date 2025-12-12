@@ -428,76 +428,159 @@ class MeshtasticTerminal:
             print(f"Input error: {e}")
             time.sleep(1)
         
-    def select_nodes(self):
-        """Select nodes for auto-send"""
-        while True:
+    def show_nodes(self):
+        """Display mesh nodes"""
+        try:
             self.clear_screen()
             self.print_header()
             
-            print("📝 SELECT NODES FOR AUTO-SEND")
+            print("👥 MESH NODES")
             print("-" * 60)
             
             try:
-                if not self.interface or not hasattr(self.interface, 'nodes') or not self.interface.nodes:
+                if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
+                    # Create a snapshot to avoid race conditions
+                    nodes_snapshot = list(self.interface.nodes.values())
+                    
+                    for node in nodes_snapshot:
+                        try:
+                            user = node.get('user', {})
+                            long_name = user.get('longName', 'Unknown')
+                            node_num = node.get('num')
+                            node_id = f"!{node_num:08x}" if node_num else 'N/A'
+                            snr = node.get('snr', 'N/A')
+                            hops = node.get('hopsAway', 0)
+                            
+                            snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
+                            
+                            last_heard = node.get('lastHeard')
+                            if last_heard:
+                                last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
+                            else:
+                                last_heard_str = 'Never'
+                            
+                            selected = "✓" if node_id in self.selected_nodes else " "
+                            print(f"[{selected}] {long_name} ({node_id})")
+                            print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
+                            print()
+                        except Exception as e:
+                            continue
+                else:
                     print("No nodes available yet...")
-                    try:
-                        input("\nPress Enter to continue...")
-                    except (KeyboardInterrupt, EOFError):
-                        pass
-                    return
+            except Exception as e:
+                print(f"Error accessing nodes: {e}")
+            
+            print()
+            try:
+                raw_input = input("Press Enter to continue...")
+            except (KeyboardInterrupt, EOFError):
+                pass
+            except Exception as e:
+                print(f"Input error: {e}")
+                time.sleep(1)
+        except Exception as e:
+            print(f"Critical error in show_nodes: {e}")
+            time.sleep(2)
+        
+    def select_nodes(self):
+        """Select nodes for auto-send"""
+        self.logger.info("Entering select_nodes function")
+        while True:
+            try:
+                self.clear_screen()
+                self.print_header()
                 
-                # Create snapshot to avoid race conditions
-                nodes_snapshot = list(self.interface.nodes.values())
-                nodes_list = []
-                idx = 1
-                
-                for node in nodes_snapshot:
-                    try:
-                        user = node.get('user', {})
-                        long_name = user.get('longName', 'Unknown')
-                        node_num = node.get('num')
-                        node_id = f"!{node_num:08x}" if node_num else 'N/A'
-                        
-                        selected = "✓" if node_id in self.selected_nodes else " "
-                        print(f"{idx}. [{selected}] {long_name} ({node_id})")
-                        nodes_list.append(node_id)
-                        idx += 1
-                    except Exception:
-                        continue
-                
-                print()
-                print("A. Select All")
-                print("C. Clear All")
-                print("S. Save and Return")
-                print("Q. Cancel and Return")
-                print()
+                print("📝 SELECT NODES FOR AUTO-SEND")
+                print("-" * 60)
                 
                 try:
-                    choice = input("Enter number to toggle, or letter: ").strip().upper()
-                except (KeyboardInterrupt, EOFError):
+                    if not self.interface or not hasattr(self.interface, 'nodes') or not self.interface.nodes:
+                        print("No nodes available yet...")
+                        self.logger.warning("No nodes available in select_nodes")
+                        try:
+                            input("\nPress Enter to continue...")
+                        except (KeyboardInterrupt, EOFError):
+                            pass
+                        return
+                    
+                    # Create snapshot to avoid race conditions
+                    self.logger.debug(f"Creating snapshot of {len(self.interface.nodes)} nodes")
+                    nodes_snapshot = list(self.interface.nodes.values())
+                    nodes_list = []
+                    idx = 1
+                    
+                    for node in nodes_snapshot:
+                        try:
+                            user = node.get('user', {})
+                            long_name = user.get('longName', 'Unknown')
+                            node_num = node.get('num')
+                            
+                            if node_num is None:
+                                self.logger.warning(f"Node with no num: {user}")
+                                continue
+                                
+                            node_id = f"!{node_num:08x}"
+                            
+                            selected = "✓" if node_id in self.selected_nodes else " "
+                            print(f"{idx}. [{selected}] {long_name} ({node_id})")
+                            nodes_list.append(node_id)
+                            idx += 1
+                        except Exception as e:
+                            self.logger.error(f"Error processing node in select_nodes: {e}")
+                            continue
+                    
+                    self.logger.debug(f"Displayed {len(nodes_list)} nodes")
+                    
+                    print()
+                    print("A. Select All")
+                    print("C. Clear All")
+                    print("S. Save and Return")
+                    print("Q. Cancel and Return")
+                    print()
+                    
+                    try:
+                        choice = input("Enter number to toggle, or letter: ").strip().upper()
+                    except (KeyboardInterrupt, EOFError):
+                        self.logger.info("User cancelled node selection")
+                        return
+                    except Exception as e:
+                        self.logger.error(f"Input error in select_nodes: {e}")
+                        return
+                    
+                    if choice == 'Q':
+                        self.logger.info("User quit node selection")
+                        return
+                    elif choice == 'S':
+                        self.save_config()
+                        print(f"✅ Saved {len(self.selected_nodes)} selected nodes")
+                        time.sleep(1)
+                        return
+                    elif choice == 'A':
+                        self.selected_nodes = nodes_list.copy()
+                        self.logger.info(f"Selected all {len(nodes_list)} nodes")
+                    elif choice == 'C':
+                        self.selected_nodes = []
+                        self.logger.info("Cleared all selected nodes")
+                    elif choice.isdigit():
+                        idx = int(choice) - 1
+                        if 0 <= idx < len(nodes_list):
+                            node_id = nodes_list[idx]
+                            if node_id in self.selected_nodes:
+                                self.selected_nodes.remove(node_id)
+                                self.logger.info(f"Deselected node {node_id}")
+                            else:
+                                self.selected_nodes.append(node_id)
+                                self.logger.info(f"Selected node {node_id}")
+                except Exception as e:
+                    msg = f"Error in node selection inner loop: {e}"
+                    print(f"❌ {msg}")
+                    self.logger.error(msg, exc_info=True)
+                    time.sleep(2)
                     return
-                
-                if choice == 'Q':
-                    return
-                elif choice == 'S':
-                    self.save_config()
-                    print(f"✅ Saved {len(self.selected_nodes)} selected nodes")
-                    time.sleep(1)
-                    return
-                elif choice == 'A':
-                    self.selected_nodes = nodes_list.copy()
-                elif choice == 'C':
-                    self.selected_nodes = []
-                elif choice.isdigit():
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(nodes_list):
-                        node_id = nodes_list[idx]
-                        if node_id in self.selected_nodes:
-                            self.selected_nodes.remove(node_id)
-                        else:
-                            self.selected_nodes.append(node_id)
             except Exception as e:
-                print(f"Error in node selection: {e}")
+                msg = f"Critical error in select_nodes: {e}"
+                print(f"❌ {msg}")
+                self.logger.error(msg, exc_info=True)
                 time.sleep(2)
                 return
                         
