@@ -705,6 +705,7 @@ class MeshtasticTerminal:
         # Build message panel for right side (40 chars wide)
         message_lines = []
         message_lines.append("")
+        message_lines.append("")
         message_lines.append("💬 RECENT MESSAGES (Last 10):")
         message_lines.append("-" * 40)
         
