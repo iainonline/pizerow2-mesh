@@ -10,6 +10,7 @@ import time
 import json
 import threading
 import logging
+import signal
 from datetime import datetime
 from typing import Optional, Dict, List
 import meshtastic
@@ -21,6 +22,10 @@ class MeshtasticTerminal:
         # Setup logging
         self.log_file = 'mesh_terminal.log'
         self.setup_logging()
+        
+        # Setup signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
         
         self.interface = None
         self.connected = False
@@ -44,6 +49,19 @@ class MeshtasticTerminal:
         
         # Load config
         self.load_config()
+        
+    def signal_handler(self, signum, frame):
+        """Handle Ctrl+C and termination signals gracefully"""
+        print("\n\n🛑 Shutting down gracefully...")
+        self.logger.info("Received shutdown signal, exiting gracefully")
+        if self.interface:
+            try:
+                self.interface.close()
+                self.logger.info("Closed interface connection")
+            except Exception as e:
+                self.logger.error(f"Error closing interface: {e}")
+        print("✅ Goodbye!")
+        sys.exit(0)
         
     def setup_logging(self):
         """Setup file and console logging"""
@@ -327,22 +345,45 @@ class MeshtasticTerminal:
             return False
         
         try:
+            sent_count = 0
             for node_id in self.selected_nodes:
                 message = self.get_telemetry_message(dest_node_id=node_id)
+                
+                # Check if node is still online
+                node_info = self.get_node_info(node_id)
+                if node_info:
+                    last_heard = node_info.get('lastHeard', 0)
+                    if last_heard:
+                        age = time.time() - last_heard
+                        age_str = f"{int(age/60)} min ago" if age > 60 else f"{int(age)} sec ago"
+                        self.logger.info(f"Sending to {node_id} (last seen {age_str})")
+                
                 self.interface.sendText(message, destinationId=node_id, wantAck=True)
                 self.stats['packets_tx'] += 1
-                self.logger.info(f"Sent telemetry to {node_id}: {message}")
+                sent_count += 1
+                self.logger.info(f"TX to {node_id}: {message}")
             
             self.last_send_time = time.time()
-            msg = f"Sent telemetry to {len(self.selected_nodes)} nodes"
+            msg = f"Sent telemetry to {sent_count} nodes"
             print(f"✅ {msg}")
             self.logger.info(msg)
+            self.logger.info("NOTE: Messages use PKC encryption (fw 2.5.0+). Key exchange happens automatically.")
             return True
         except Exception as e:
             msg = f"Error sending telemetry: {e}"
             print(f"❌ {msg}")
-            self.logger.error(msg)
+            self.logger.error(msg, exc_info=True)
             return False
+            
+    def get_node_info(self, node_id: str) -> Optional[Dict]:
+        """Get node information by ID"""
+        if not self.interface or not hasattr(self.interface, 'nodes'):
+            return None
+        for node in self.interface.nodes.values():
+            node_num = node.get('num')
+            if node_num and f"!{node_num:08x}" == node_id:
+                return node
+        return None
             
     def auto_send_worker(self):
         """Background worker for auto-send"""
@@ -666,28 +707,42 @@ class MeshtasticTerminal:
         self.clear_screen()
         self.print_header()
         
-        print("🔐 ENCRYPTION KEY MANAGEMENT")
+        print("🔐 ENCRYPTION & MESSAGE DELIVERY")
         print("-" * 60)
         print()
-        print("ℹ️  DIRECT MESSAGES (Person-to-Person):")
-        print("   ✅ Uses PKC (Public Key Cryptography) - firmware 2.5.0+")
-        print("   ✅ Automatically encrypted end-to-end")
-        print("   ✅ No manual key management needed")
-        print("   ✅ Only sender and recipient can read messages")
+        print("✅ NO KEYS NEEDED - Direct Messages automatically use PKC!")
         print()
-        print("   This program sends DIRECT MESSAGES with wantAck=True")
-        print("   Messages are automatically encrypted using PKC")
-        print("   Recipient's device decrypts using their private key")
+        print("📱 How It Works:")
+        print("   • Each device has automatic public/private key pair")
+        print("   • Messages encrypted with recipient's public key")
+        print("   • Only recipient can decrypt with their private key")
+        print("   • Key exchange happens automatically on first contact")
+        print("   • Requires firmware 2.5.0 or newer on both devices")
         print()
-        print("💡 TROUBLESHOOTING - If recipient not receiving messages:")
-        print("   1. Check recipient device is online (check lastHeard time)")
-        print("   2. Ensure recipient is within mesh range or multi-hop route exists")
-        print("   3. Check recipient's firmware is 2.5.0+ for PKC support")
-        print("   4. Verify recipient's device is not in sleep mode")
-        print("   5. Check this log file for send confirmations")
+        print("❌ Common Reasons Messages Aren't Received:")
         print()
-        print("📡 For channel (broadcast) encryption:")
-        print("   Use: meshtastic --set-channel --channel-name MyChannel --psk <base64-key>")
+        print("   1. FIRMWARE VERSION")
+        print("      • Both devices need firmware 2.5.0+ for PKC")
+        print("      • Check: Settings > Radio Configuration > Device")
+        print()
+        print("   2. RECIPIENT OFFLINE/SLEEPING")
+        print("      • Check 'Last Heard' time in node selection")
+        print("      • Device may be in deep sleep mode")
+        print()
+        print("   3. OUT OF RANGE")
+        print("      • Recipient beyond radio range")
+        print("      • No multi-hop route available")
+        print("      • Check hop count (default max: 3)")
+        print()
+        print("   4. KEY EXCHANGE NOT YET COMPLETED")
+        print("      • Happens automatically when nodes first communicate")
+        print("      • May take a few messages to establish")
+        print()
+        print(f"   5. CHECK LOG FILE: {self.log_file}")
+        print("      • See if messages are being sent successfully")
+        print("      • Check for error messages")
+        print()
+        print("💡 TIP: Try sending a test message and check the log for details")
         print()
         input("Press Enter to continue...")
         
