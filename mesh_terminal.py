@@ -321,6 +321,38 @@ class MeshtasticTerminal:
                     
         except Exception as e:
             pass
+    
+    def get_current_device_telemetry(self) -> Optional[Dict]:
+        """Get current telemetry from local device in interface.nodes"""
+        try:
+            if self.interface and hasattr(self.interface, 'myInfo') and self.interface.myInfo:
+                node_num = self.interface.myInfo.get('num')
+                if node_num:
+                    node_id = f"!{node_num:08x}"
+                    if hasattr(self.interface, 'nodes') and self.interface.nodes and node_id in self.interface.nodes:
+                        node = self.interface.nodes[node_id]
+                        telemetry = {}
+                        
+                        # Get device metrics
+                        if 'deviceMetrics' in node:
+                            dm = node['deviceMetrics']
+                            telemetry['battery'] = dm.get('batteryLevel')
+                            telemetry['voltage'] = dm.get('voltage')
+                            telemetry['channel_util'] = dm.get('channelUtilization')
+                            telemetry['air_util'] = dm.get('airUtilTx')
+                        
+                        # Get environment metrics if available
+                        if 'environmentMetrics' in node:
+                            em = node['environmentMetrics']
+                            telemetry['temperature'] = em.get('temperature')
+                            telemetry['humidity'] = em.get('relativeHumidity')
+                            telemetry['pressure'] = em.get('barometricPressure')
+                        
+                        if telemetry:
+                            return telemetry
+        except Exception as e:
+            self.logger.debug(f"Error getting current device telemetry: {e}")
+        return None
             
     def get_telemetry_message(self, dest_node_id: Optional[str] = None) -> str:
         """Generate telemetry message"""
@@ -467,12 +499,18 @@ class MeshtasticTerminal:
         print("🔄 AUTO-SEND MODE ACTIVE")
         print("=" * 60)
         
+        # Get current device telemetry from interface.nodes
+        current_telemetry = self.get_current_device_telemetry()
+        
+        # Fall back to telemetry_history if current not available
+        if not current_telemetry and self.telemetry_history:
+            current_telemetry = self.telemetry_history[-1]
+        
         # Show sensor data if available
-        if self.telemetry_history:
-            latest = self.telemetry_history[-1]
-            temp = latest.get('temperature')
-            humidity = latest.get('humidity')
-            pressure = latest.get('pressure')
+        if current_telemetry:
+            temp = current_telemetry.get('temperature')
+            humidity = current_telemetry.get('humidity')
+            pressure = current_telemetry.get('pressure')
             
             if temp is not None or humidity is not None or pressure is not None:
                 print("\n🌡️  LOCAL SENSOR DATA:")
@@ -483,12 +521,10 @@ class MeshtasticTerminal:
                     print(f"   Humidity: {humidity:.1f}%")
                 if pressure is not None:
                     print(f"   Pressure: {pressure:.1f} hPa")
-            else:
-                print("\n⚠️  No BME280 sensor detected")
             
             # Device metrics
-            battery = latest.get('battery')
-            voltage = latest.get('voltage')
+            battery = current_telemetry.get('battery')
+            voltage = current_telemetry.get('voltage')
             if battery is not None or voltage is not None:
                 print("\n🔋 DEVICE STATUS:")
                 if battery is not None:
@@ -498,6 +534,8 @@ class MeshtasticTerminal:
                         print(f"   Battery: {battery}%")
                 if voltage is not None:
                     print(f"   Voltage: {voltage:.2f}V")
+        else:
+            print("\n⚠️  No telemetry data available yet")
         
         # Show target nodes
         if self.selected_nodes:
