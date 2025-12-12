@@ -11,6 +11,8 @@ import json
 import threading
 import logging
 import signal
+import termios
+import tty
 from datetime import datetime
 from typing import Optional, Dict, List
 import meshtastic
@@ -1654,7 +1656,14 @@ def main():
                 
                 # Check for key press with short timeout
                 if select.select([sys.stdin], [], [], 0.5)[0]:
-                    key = sys.stdin.readline().strip().upper()
+                    # Read single character without waiting for Enter
+                    old_settings = termios.tcgetattr(sys.stdin)
+                    try:
+                        tty.setraw(sys.stdin.fileno())
+                        key = sys.stdin.read(1).upper()
+                    finally:
+                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    
                     if key == 'M':
                         terminal.logger.info("User pressed M to enter menu")
                         print("\nEntering menu...")
