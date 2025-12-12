@@ -417,48 +417,57 @@ class MeshtasticTerminal:
         self.clear_screen()
         self.print_header()
         
-        print("📊 CURRENT TELEMETRY")
+        print("📊 CURRENT TELEMETRY (Local Device)")
         print("-" * 60)
         
         try:
             if self.telemetry_history:
                 latest = self.telemetry_history[-1]
                 
+                # Environment sensors (BME280)
                 temp = latest.get('temperature')
-                if temp is not None:
-                    temp_f = (temp * 9/5) + 32
-                    print(f"🌡️  Temperature: {temp_f:.1f}°F")
-                
                 humidity = latest.get('humidity')
-                if humidity is not None:
-                    print(f"💧 Humidity: {humidity:.1f}%")
-                
                 pressure = latest.get('pressure')
-                if pressure is not None:
-                    print(f"🌀 Pressure: {pressure:.1f} hPa")
                 
+                if temp is not None or humidity is not None or pressure is not None:
+                    print("\n🌡️  ENVIRONMENT SENSORS (BME280):")
+                    if temp is not None:
+                        temp_f = (temp * 9/5) + 32
+                        print(f"   Temperature: {temp_f:.1f}°F ({temp:.1f}°C)")
+                    if humidity is not None:
+                        print(f"   Humidity: {humidity:.1f}%")
+                    if pressure is not None:
+                        print(f"   Pressure: {pressure:.1f} hPa")
+                else:
+                    print("\n⚠️  No BME280 sensor data available")
+                    print("   (Device may not have BME280 sensor attached)")
+                
+                # Device metrics
+                print("\n🔋 DEVICE METRICS:")
                 battery = latest.get('battery')
                 if battery is not None:
                     if battery == 101:
-                        print("🔋 Battery: Powered")
+                        print("   Battery: Powered (USB/Solar)")
                     else:
-                        print(f"🔋 Battery: {battery}%")
+                        print(f"   Battery: {battery}%")
                 
                 voltage = latest.get('voltage')
                 if voltage is not None:
-                    print(f"⚡ Voltage: {voltage:.2f}V")
+                    print(f"   Voltage: {voltage:.2f}V")
                 
                 channel_util = latest.get('channel_util')
                 if channel_util is not None:
-                    print(f"📻 Channel Util: {channel_util:.1f}%")
+                    print(f"   Channel Utilization: {channel_util:.1f}%")
                 
                 air_util = latest.get('air_util')
                 if air_util is not None:
-                    print(f"📶 Air Util TX: {air_util:.1f}%")
+                    print(f"   Air Utilization TX: {air_util:.1f}%")
             else:
                 print("No telemetry data available yet...")
+                print("Waiting for device to broadcast telemetry...")
         except Exception as e:
             print(f"Error displaying telemetry: {e}")
+            self.logger.error(f"Error in show_telemetry: {e}", exc_info=True)
         
         print()
         try:
