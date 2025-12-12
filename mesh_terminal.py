@@ -66,30 +66,54 @@ class MeshtasticTerminal:
             print(f"⚠️  Error saving config: {e}")
             
     def connect_device(self):
-        """Connect to Meshtastic device"""
-        try:
-            print("📡 Connecting to device via USB...")
-            self.interface = meshtastic.serial_interface.SerialInterface()
-            
-            # Subscribe to message events
-            pub.subscribe(self.on_receive, "meshtastic.receive")
-            pub.subscribe(self.on_connection, "meshtastic.connection.established")
-            
-            time.sleep(2)
-            self.connected = True
-            print("✅ Connected successfully!")
-            
-            # Get local node info
-            if self.interface.myInfo:
-                my_node = self.interface.myInfo.get('user', {})
-                long_name = my_node.get('longName', 'Unknown')
-                node_num = self.interface.myInfo.get('num')
-                node_id = f"!{node_num:08x}" if node_num else 'N/A'
-                print(f"📱 Local Node: {long_name} ({node_id})")
+        """Connect to Meshtastic device with retry"""
+        retry_count = 0
+        max_retries = 10
+        retry_delay = 5
+        
+        while retry_count < max_retries:
+            try:
+                if retry_count > 0:
+                    print(f"🔄 Retry {retry_count}/{max_retries} in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
                 
-        except Exception as e:
-            print(f"❌ Connection failed: {e}")
-            self.connected = False
+                print("📡 Connecting to device via USB...")
+                self.interface = meshtastic.serial_interface.SerialInterface()
+                
+                # Subscribe to message events
+                pub.subscribe(self.on_receive, "meshtastic.receive")
+                pub.subscribe(self.on_connection, "meshtastic.connection.established")
+                
+                time.sleep(2)
+                self.connected = True
+                print("✅ Connected successfully!")
+                
+                # Get local node info
+                try:
+                    if hasattr(self.interface, 'myInfo') and self.interface.myInfo:
+                        my_node = self.interface.myInfo.get('user', {})
+                        long_name = my_node.get('longName', 'Unknown')
+                        node_num = self.interface.myInfo.get('num')
+                        node_id = f"!{node_num:08x}" if node_num else 'N/A'
+                        print(f"📱 Local Node: {long_name} ({node_id})")
+                except Exception:
+                    pass
+                
+                return  # Success, exit retry loop
+                    
+            except Exception as e:
+                print(f"❌ Connection failed: {e}")
+                retry_count += 1
+                self.connected = False
+        
+        # If we get here, all retries failed
+        print(f"\n❌ Failed to connect after {max_retries} attempts")
+        print("Please check:")
+        print("  - Device is plugged in via USB")
+        print("  - Device is powered on")
+        print("  - USB cable supports data transfer")
+        print("  - User has permissions (try: sudo usermod -a -G dialout $USER)")
+        time.sleep(5)
             
     def on_connection(self, interface, topic=pub.AUTO_TOPIC):
         """Called when connection is established"""
@@ -283,45 +307,51 @@ class MeshtasticTerminal:
         print("📊 CURRENT TELEMETRY")
         print("-" * 60)
         
-        if self.telemetry_history:
-            latest = self.telemetry_history[-1]
-            
-            temp = latest.get('temperature')
-            if temp is not None:
-                temp_f = (temp * 9/5) + 32
-                print(f"🌡️  Temperature: {temp_f:.1f}°F")
-            
-            humidity = latest.get('humidity')
-            if humidity is not None:
-                print(f"💧 Humidity: {humidity:.1f}%")
-            
-            pressure = latest.get('pressure')
-            if pressure is not None:
-                print(f"🌀 Pressure: {pressure:.1f} hPa")
-            
-            battery = latest.get('battery')
-            if battery is not None:
-                if battery == 101:
-                    print("🔋 Battery: Powered")
-                else:
-                    print(f"🔋 Battery: {battery}%")
-            
-            voltage = latest.get('voltage')
-            if voltage is not None:
-                print(f"⚡ Voltage: {voltage:.2f}V")
-            
-            channel_util = latest.get('channel_util')
-            if channel_util is not None:
-                print(f"📻 Channel Util: {channel_util:.1f}%")
-            
-            air_util = latest.get('air_util')
-            if air_util is not None:
-                print(f"📶 Air Util TX: {air_util:.1f}%")
-        else:
-            print("No telemetry data available yet...")
+        try:
+            if self.telemetry_history:
+                latest = self.telemetry_history[-1]
+                
+                temp = latest.get('temperature')
+                if temp is not None:
+                    temp_f = (temp * 9/5) + 32
+                    print(f"🌡️  Temperature: {temp_f:.1f}°F")
+                
+                humidity = latest.get('humidity')
+                if humidity is not None:
+                    print(f"💧 Humidity: {humidity:.1f}%")
+                
+                pressure = latest.get('pressure')
+                if pressure is not None:
+                    print(f"🌀 Pressure: {pressure:.1f} hPa")
+                
+                battery = latest.get('battery')
+                if battery is not None:
+                    if battery == 101:
+                        print("🔋 Battery: Powered")
+                    else:
+                        print(f"🔋 Battery: {battery}%")
+                
+                voltage = latest.get('voltage')
+                if voltage is not None:
+                    print(f"⚡ Voltage: {voltage:.2f}V")
+                
+                channel_util = latest.get('channel_util')
+                if channel_util is not None:
+                    print(f"📻 Channel Util: {channel_util:.1f}%")
+                
+                air_util = latest.get('air_util')
+                if air_util is not None:
+                    print(f"📶 Air Util TX: {air_util:.1f}%")
+            else:
+                print("No telemetry data available yet...")
+        except Exception as e:
+            print(f"Error displaying telemetry: {e}")
         
         print()
-        input("Press Enter to continue...")
+        try:
+            input("Press Enter to continue...")
+        except (KeyboardInterrupt, EOFError):
+            pass
         
     def show_nodes(self):
         """Display mesh nodes"""
@@ -331,32 +361,45 @@ class MeshtasticTerminal:
         print("👥 MESH NODES")
         print("-" * 60)
         
-        if self.interface and self.interface.nodes:
-            for node in self.interface.nodes.values():
-                user = node.get('user', {})
-                long_name = user.get('longName', 'Unknown')
-                node_num = node.get('num')
-                node_id = f"!{node_num:08x}" if node_num else 'N/A'
-                snr = node.get('snr', 'N/A')
-                hops = node.get('hopsAway', 0)
+        try:
+            if self.interface and hasattr(self.interface, 'nodes') and self.interface.nodes:
+                # Create a snapshot to avoid race conditions
+                nodes_snapshot = list(self.interface.nodes.values())
                 
-                snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
-                
-                last_heard = node.get('lastHeard')
-                if last_heard:
-                    last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
-                else:
-                    last_heard_str = 'Never'
-                
-                selected = "✓" if node_id in self.selected_nodes else " "
-                print(f"[{selected}] {long_name} ({node_id})")
-                print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
-                print()
-        else:
-            print("No nodes available yet...")
+                for node in nodes_snapshot:
+                    try:
+                        user = node.get('user', {})
+                        long_name = user.get('longName', 'Unknown')
+                        node_num = node.get('num')
+                        node_id = f"!{node_num:08x}" if node_num else 'N/A'
+                        snr = node.get('snr', 'N/A')
+                        hops = node.get('hopsAway', 0)
+                        
+                        snr_str = f"{snr:.1f}dB" if isinstance(snr, (int, float)) else 'N/A'
+                        
+                        last_heard = node.get('lastHeard')
+                        if last_heard:
+                            last_heard_str = datetime.fromtimestamp(last_heard).strftime('%H:%M:%S')
+                        else:
+                            last_heard_str = 'Never'
+                        
+                        selected = "✓" if node_id in self.selected_nodes else " "
+                        print(f"[{selected}] {long_name} ({node_id})")
+                        print(f"    SNR: {snr_str} | Hops: {hops} | Last: {last_heard_str}")
+                        print()
+                    except Exception as e:
+                        print(f"Error displaying node: {e}")
+                        continue
+            else:
+                print("No nodes available yet...")
+        except Exception as e:
+            print(f"Error accessing nodes: {e}")
         
         print()
-        input("Press Enter to continue...")
+        try:
+            input("Press Enter to continue...")
+        except (KeyboardInterrupt, EOFError):
+            pass
         
     def select_nodes(self):
         """Select nodes for auto-send"""
@@ -367,52 +410,69 @@ class MeshtasticTerminal:
             print("📝 SELECT NODES FOR AUTO-SEND")
             print("-" * 60)
             
-            if not self.interface or not self.interface.nodes:
-                print("No nodes available yet...")
-                input("\nPress Enter to continue...")
-                return
-            
-            nodes_list = []
-            idx = 1
-            for node in self.interface.nodes.values():
-                user = node.get('user', {})
-                long_name = user.get('longName', 'Unknown')
-                node_num = node.get('num')
-                node_id = f"!{node_num:08x}" if node_num else 'N/A'
+            try:
+                if not self.interface or not hasattr(self.interface, 'nodes') or not self.interface.nodes:
+                    print("No nodes available yet...")
+                    try:
+                        input("\nPress Enter to continue...")
+                    except (KeyboardInterrupt, EOFError):
+                        pass
+                    return
                 
-                selected = "✓" if node_id in self.selected_nodes else " "
-                print(f"{idx}. [{selected}] {long_name} ({node_id})")
-                nodes_list.append(node_id)
-                idx += 1
-            
-            print()
-            print("A. Select All")
-            print("C. Clear All")
-            print("S. Save and Return")
-            print("Q. Cancel and Return")
-            print()
-            
-            choice = input("Enter number to toggle, or letter: ").strip().upper()
-            
-            if choice == 'Q':
+                # Create snapshot to avoid race conditions
+                nodes_snapshot = list(self.interface.nodes.values())
+                nodes_list = []
+                idx = 1
+                
+                for node in nodes_snapshot:
+                    try:
+                        user = node.get('user', {})
+                        long_name = user.get('longName', 'Unknown')
+                        node_num = node.get('num')
+                        node_id = f"!{node_num:08x}" if node_num else 'N/A'
+                        
+                        selected = "✓" if node_id in self.selected_nodes else " "
+                        print(f"{idx}. [{selected}] {long_name} ({node_id})")
+                        nodes_list.append(node_id)
+                        idx += 1
+                    except Exception:
+                        continue
+                
+                print()
+                print("A. Select All")
+                print("C. Clear All")
+                print("S. Save and Return")
+                print("Q. Cancel and Return")
+                print()
+                
+                try:
+                    choice = input("Enter number to toggle, or letter: ").strip().upper()
+                except (KeyboardInterrupt, EOFError):
+                    return
+                
+                if choice == 'Q':
+                    return
+                elif choice == 'S':
+                    self.save_config()
+                    print(f"✅ Saved {len(self.selected_nodes)} selected nodes")
+                    time.sleep(1)
+                    return
+                elif choice == 'A':
+                    self.selected_nodes = nodes_list.copy()
+                elif choice == 'C':
+                    self.selected_nodes = []
+                elif choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(nodes_list):
+                        node_id = nodes_list[idx]
+                        if node_id in self.selected_nodes:
+                            self.selected_nodes.remove(node_id)
+                        else:
+                            self.selected_nodes.append(node_id)
+            except Exception as e:
+                print(f"Error in node selection: {e}")
+                time.sleep(2)
                 return
-            elif choice == 'S':
-                self.save_config()
-                print(f"✅ Saved {len(self.selected_nodes)} selected nodes")
-                time.sleep(1)
-                return
-            elif choice == 'A':
-                self.selected_nodes = nodes_list.copy()
-            elif choice == 'C':
-                self.selected_nodes = []
-            elif choice.isdigit():
-                idx = int(choice) - 1
-                if 0 <= idx < len(nodes_list):
-                    node_id = nodes_list[idx]
-                    if node_id in self.selected_nodes:
-                        self.selected_nodes.remove(node_id)
-                    else:
-                        self.selected_nodes.append(node_id)
                         
     def configure_auto_send(self):
         """Configure auto-send settings"""
@@ -557,8 +617,16 @@ def main():
     terminal.connect_device()
     
     if not terminal.connected:
-        print("\n❌ Failed to connect. Please check your device and try again.")
-        sys.exit(1)
+        print("\n⚠️  Running in disconnected mode (will keep trying in background)")
+        # Start background reconnection thread
+        def reconnect_worker():
+            while not terminal.connected:
+                time.sleep(30)
+                print("\n🔄 Attempting reconnection...")
+                terminal.connect_device()
+        
+        reconnect_thread = threading.Thread(target=reconnect_worker, daemon=True)
+        reconnect_thread.start()
     
     # If auto-started and auto-send is enabled, just run in background
     if auto_started and terminal.auto_send_enabled:
