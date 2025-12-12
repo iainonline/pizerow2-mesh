@@ -1,0 +1,22 @@
+[Unit]
+Description=Meshtastic ChatBot
+After=network.target bluetooth.target
+Wants=network.target bluetooth.target
+
+[Service]
+Type=simple
+User=iain
+WorkingDirectory=/home/iain/Meshtastic
+ExecStart=/home/iain/Meshtastic/start_chatbot.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment settings
+Environment="PYTHONUNBUFFERED=1"
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/iain/.Xauthority"
+
+[Install]
+WantedBy=multi-user.target
